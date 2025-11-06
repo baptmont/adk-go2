@@ -18,25 +18,45 @@ import (
 	"context"
 	"fmt"
 	"iter"
+	"net/http"
+	"runtime"
+	"strings"
 
 	"google.golang.org/adk/internal/llminternal"
 	"google.golang.org/adk/internal/llminternal/converters"
+	"google.golang.org/adk/internal/version"
 	"google.golang.org/adk/model"
 	"google.golang.org/genai"
 )
 
 // TODO: test coverage
 type geminiModel struct {
-	client *genai.Client
-	name   string
+	client             *genai.Client
+	name               string
+	versionHeaderValue string
 }
 
+// NewModel creates and initializes a new model instance that satisfies the
+// model.LLM interface, backed by the Gemini API.
+//
+// It uses the provided context and configuration to initialize the underlying
+// genai.Client. The modelName specifies which Gemini model to target
+// (e.g., "gemini-2.5-flash").
+//
+// An error is returned if the genai.Client fails to initialize.
 func NewModel(ctx context.Context, modelName string, cfg *genai.ClientConfig) (model.LLM, error) {
+	m := &geminiModel{name: modelName}
+
+	// Create header value once, when the model is created
+	m.versionHeaderValue = fmt.Sprintf("google-adk/%s gl-go/%s", version.Version,
+		strings.TrimPrefix(runtime.Version(), "go"))
+
 	client, err := genai.NewClient(ctx, cfg)
 	if err != nil {
 		return nil, err
 	}
-	return &geminiModel{name: modelName, client: client}, nil
+	m.client = client
+	return m, nil
 }
 
 func (m *geminiModel) Name() string {
@@ -46,6 +66,16 @@ func (m *geminiModel) Name() string {
 // GenerateContent calls the underlying model.
 func (m *geminiModel) GenerateContent(ctx context.Context, req *model.LLMRequest, stream bool) iter.Seq2[*model.LLMResponse, error] {
 	m.maybeAppendUserContent(req)
+	if req.Config == nil {
+		req.Config = &genai.GenerateContentConfig{}
+	}
+	if req.Config.HTTPOptions == nil {
+		req.Config.HTTPOptions = &genai.HTTPOptions{}
+	}
+	if req.Config.HTTPOptions.Headers == nil {
+		req.Config.HTTPOptions.Headers = make(http.Header)
+	}
+	m.addTrackingHeaders(req.Config.HTTPOptions.Headers)
 
 	if stream {
 		return m.generateStream(ctx, req)
@@ -55,6 +85,14 @@ func (m *geminiModel) GenerateContent(ctx context.Context, req *model.LLMRequest
 		resp, err := m.generate(ctx, req)
 		yield(resp, err)
 	}
+}
+
+// addTrackingHeaders sets the x-goog-api-client and user-agent headers
+// for telemetry and tracking.
+func (m *geminiModel) addTrackingHeaders(headers http.Header) {
+	// Set the headers
+	headers.Set("x-goog-api-client", m.versionHeaderValue)
+	headers.Set("user-agent", m.versionHeaderValue)
 }
 
 // generate calls the model synchronously returning result from the first candidate.
