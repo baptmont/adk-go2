@@ -52,11 +52,14 @@ func createReasoningEngine(ctx context.Context, projectID, location, displayName
 
 	// Create the client
 	client, err := aiplatform.NewReasoningEngineClient(ctx, option.WithEndpoint(endpoint))
-
 	if err != nil {
 		return fmt.Errorf("failed to create ReasoningEngineClient: %w", err)
 	}
-	defer client.Close()
+	defer func() {
+		if err := client.Close(); err != nil {
+			log.Printf("Warning: failed to close client: %v", err)
+		}
+	}()
 
 	// Define the ReasoningEngine object
 	reasoningEngine := &aiplatformpb.ReasoningEngine{
