@@ -48,6 +48,24 @@ func NewSessionService(dialector gorm.Dialector, opts ...gorm.Option) (session.S
 	return &databaseService{db: db}, nil
 }
 
+// AutoMigrate runs the GORM auto-migration tool to ensure the database schema
+// matches the internal storage models (e.g., storageSession, storageEvent).
+//
+// NOTE: This function relies on a type assertion to the concrete *databaseService
+// implementation. It will return an error if the provided session.Service is
+// a different implementation.
+func AutoMigrate(service session.Service) error {
+	dbservice, ok := service.(*databaseService)
+	if !ok {
+		return fmt.Errorf("invalid session service type")
+	}
+	err := dbservice.db.AutoMigrate(&storageSession{}, &storageEvent{}, &storageAppState{}, &storageUserState{})
+	if err != nil {
+		return fmt.Errorf("error auto migrating session service :%w", err)
+	}
+	return nil
+}
+
 // Create generates a session and inserts it to the db, implements session.Service
 func (s *databaseService) Create(ctx context.Context, req *session.CreateRequest) (*session.CreateResponse, error) {
 	if req.AppName == "" || req.UserID == "" {
