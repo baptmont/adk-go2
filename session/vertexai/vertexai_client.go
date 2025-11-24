@@ -214,6 +214,11 @@ func (c *vertexAiClient) deleteSession(ctx context.Context, req *session.DeleteR
 }
 
 func (c *vertexAiClient) appendEvent(ctx context.Context, appName, sessionID string, event *session.Event) error {
+	// ignore partial events
+	if event.Partial {
+		return nil
+	}
+
 	reasoningEngine, err := c.getReasoningEngineID(appName)
 	if err != nil {
 		return err
@@ -230,18 +235,59 @@ func (c *vertexAiClient) appendEvent(ctx context.Context, appName, sessionID str
 	}
 
 	// TODO add logic for other types of parts
-	parts := make([]*aiplatformpb.Part, 0)
-	role := genai.RoleUser
+	var content *aiplatformpb.Content
 	if event.Content != nil {
-		role = event.Content.Role
+		parts := make([]*aiplatformpb.Part, 0)
 		for _, part := range event.Content.Parts {
+			aiplatformPart := &aiplatformpb.Part{}
 			if part.Text != "" {
-				aiplatformPart := aiplatformpb.Part{
-					Data: &aiplatformpb.Part_Text{Text: part.Text},
-				}
-				parts = append(parts, &aiplatformPart)
+				aiplatformPart.Data = &aiplatformpb.Part_Text{Text: part.Text}
 			}
+			if part.InlineData != nil {
+				aiplatformPart.Data = &aiplatformpb.Part_InlineData{
+					InlineData: &aiplatformpb.Blob{
+						Data:     part.InlineData.Data,
+						MimeType: part.InlineData.MIMEType,
+					},
+				}
+			}
+			if part.FunctionCall != nil {
+				args, err := structpb.NewStruct(part.FunctionCall.Args)
+				if err != nil {
+					return fmt.Errorf("failed to convert function call to structpb: %w", err)
+				}
+				aiplatformPart.Data = &aiplatformpb.Part_FunctionCall{
+					FunctionCall: &aiplatformpb.FunctionCall{
+						Id:   part.FunctionCall.ID,
+						Name: part.FunctionCall.Name,
+						Args: args,
+					},
+				}
+			}
+			if part.FunctionResponse != nil {
+				response, err := structpb.NewStruct(part.FunctionResponse.Response)
+				if err != nil {
+					return fmt.Errorf("failed to convert function response to structpb: %w", err)
+				}
+				aiplatformPart.Data = &aiplatformpb.Part_FunctionResponse{
+					FunctionResponse: &aiplatformpb.FunctionResponse{
+						Id:       part.FunctionResponse.ID,
+						Name:     part.FunctionResponse.Name,
+						Response: response,
+					},
+				}
+			}
+			parts = append(parts, aiplatformPart)
 		}
+		content = &aiplatformpb.Content{
+			Parts: parts,
+			Role:  event.Content.Role,
+		}
+	}
+
+	metadata, err := createAiplatformpbMetadata(event)
+	if err != nil {
+		return fmt.Errorf("error creating metadata: %w", err)
 	}
 
 	_, err = c.rpcClient.AppendEvent(ctx, &aiplatformpb.AppendEventRequest{
@@ -251,13 +297,13 @@ func (c *vertexAiClient) appendEvent(ctx context.Context, appName, sessionID str
 				Seconds: event.Timestamp.Unix(),
 				Nanos:   int32(event.Timestamp.Nanosecond()),
 			},
-			Author:       event.Author,
-			InvocationId: event.InvocationID,
-			Content: &aiplatformpb.Content{
-				Parts: parts,
-				Role:  role,
-			},
-			Actions: eventState,
+			Author:        event.Author,
+			InvocationId:  event.InvocationID,
+			Content:       content,
+			Actions:       eventState,
+			EventMetadata: metadata,
+			ErrorCode:     event.ErrorCode,
+			ErrorMessage:  event.ErrorMessage,
 		},
 	})
 	if err != nil {
@@ -290,14 +336,40 @@ func (c *vertexAiClient) listSessionEvents(ctx context.Context, appName, session
 		if err != nil {
 			return nil, fmt.Errorf("error fetching session events: %w", err)
 		}
-		parts := make([]*genai.Part, 0)
-		role := genai.RoleUser
+
 		// TODO add logic for other types of parts
+		var content *genai.Content
 		if rpcResp.Content != nil {
-			role = rpcResp.Content.Role
+			var parts []*genai.Part
+			role := rpcResp.Content.Role
 			for _, respPart := range rpcResp.Content.Parts {
-				part := genai.NewPartFromText(respPart.GetText())
+				part := &genai.Part{}
+				switch v := respPart.Data.(type) {
+				case *aiplatformpb.Part_Text:
+					part.Text = v.Text
+				case *aiplatformpb.Part_InlineData:
+					part.InlineData = &genai.Blob{
+						MIMEType: v.InlineData.MimeType,
+						Data:     v.InlineData.Data,
+					}
+				case *aiplatformpb.Part_FunctionCall:
+					argsMap := v.FunctionCall.Args.AsMap() // Converts *structpb.Struct -> map[string]any
+					part.FunctionCall = &genai.FunctionCall{
+						Name: v.FunctionCall.Name,
+						Args: argsMap,
+					}
+				case *aiplatformpb.Part_FunctionResponse:
+					responseMap := v.FunctionResponse.Response.AsMap() // Converts *structpb.Struct -> map[string]any
+					part.FunctionResponse = &genai.FunctionResponse{
+						Name:     v.FunctionResponse.Name,
+						Response: responseMap,
+					}
+				}
 				parts = append(parts, part)
+			}
+			content = &genai.Content{
+				Parts: parts,
+				Role:  role,
 			}
 		}
 		event := &session.Event{
@@ -309,11 +381,21 @@ func (c *vertexAiClient) listSessionEvents(ctx context.Context, appName, session
 				StateDelta: filterNilValues(rpcResp.Actions.StateDelta.AsMap()),
 			},
 			LLMResponse: model.LLMResponse{
-				Content: &genai.Content{
-					Parts: parts,
-					Role:  role,
-				},
+				Content:      content,
+				ErrorCode:    rpcResp.ErrorCode,
+				ErrorMessage: rpcResp.ErrorMessage,
 			},
+		}
+		if rpcResp.EventMetadata != nil {
+			event.Branch = rpcResp.EventMetadata.Branch
+			event.TurnComplete = rpcResp.EventMetadata.TurnComplete
+			event.Partial = rpcResp.EventMetadata.Partial
+			event.Interrupted = rpcResp.EventMetadata.Interrupted
+			event.LongRunningToolIDs = rpcResp.EventMetadata.LongRunningToolIds
+			event.GroundingMetadata = createGroundingMetadata(rpcResp.EventMetadata.GroundingMetadata)
+			if rpcResp.EventMetadata.CustomMetadata != nil {
+				event.CustomMetadata = rpcResp.EventMetadata.CustomMetadata.AsMap()
+			}
 		}
 		events = append(events, event)
 	}
@@ -360,4 +442,259 @@ func (c *vertexAiClient) getReasoningEngineID(appName string) (string, error) {
 
 	// The last group is the ID
 	return matches[len(matches)-1], nil
+}
+
+func createAiplatformpbMetadata(event *session.Event) (*aiplatformpb.EventMetadata, error) {
+	if event == nil {
+		return nil, nil
+	}
+	metadata := &aiplatformpb.EventMetadata{
+		Partial:            event.Partial,
+		TurnComplete:       event.TurnComplete,
+		Interrupted:        event.Interrupted,
+		LongRunningToolIds: event.LongRunningToolIDs,
+		Branch:             event.Branch,
+	}
+	if event.CustomMetadata != nil {
+		customMetadata, err := structpb.NewStruct(event.CustomMetadata)
+		if err != nil {
+			return nil, fmt.Errorf("failed to convert event customMetadata to structpb: %w", err)
+		}
+		metadata.CustomMetadata = customMetadata
+	}
+	if event.GroundingMetadata != nil {
+		metadata.GroundingMetadata = &aiplatformpb.GroundingMetadata{
+			WebSearchQueries:             event.GroundingMetadata.WebSearchQueries,
+			RetrievalQueries:             event.GroundingMetadata.RetrievalQueries,
+			GoogleMapsWidgetContextToken: &event.GroundingMetadata.GoogleMapsWidgetContextToken,
+		}
+		if event.GroundingMetadata.SearchEntryPoint != nil {
+			metadata.GroundingMetadata.SearchEntryPoint = &aiplatformpb.SearchEntryPoint{
+				RenderedContent: event.GroundingMetadata.SearchEntryPoint.RenderedContent,
+				SdkBlob:         event.GroundingMetadata.SearchEntryPoint.SDKBlob,
+			}
+		}
+		if event.GroundingMetadata.RetrievalMetadata != nil {
+			metadata.GroundingMetadata.RetrievalMetadata = &aiplatformpb.RetrievalMetadata{
+				GoogleSearchDynamicRetrievalScore: event.GroundingMetadata.RetrievalMetadata.GoogleSearchDynamicRetrievalScore,
+			}
+		}
+		var groundingChunks []*aiplatformpb.GroundingChunk
+		for _, gc := range event.GroundingMetadata.GroundingChunks {
+			if gc.Maps != nil {
+				maps := &aiplatformpb.GroundingChunk_Maps{
+					Uri:     &gc.Maps.URI,
+					Title:   &gc.Maps.Title,
+					Text:    &gc.Maps.Text,
+					PlaceId: &gc.Maps.PlaceID,
+				}
+				if gc.Maps.PlaceAnswerSources != nil {
+					var reviewSnippets []*aiplatformpb.GroundingChunk_Maps_PlaceAnswerSources_ReviewSnippet
+					for _, source := range gc.Maps.PlaceAnswerSources.ReviewSnippets {
+						snippet := &aiplatformpb.GroundingChunk_Maps_PlaceAnswerSources_ReviewSnippet{
+							ReviewId:      source.Review,
+							GoogleMapsUri: source.GoogleMapsURI,
+							//FIXME Title: missing in source
+						}
+						reviewSnippets = append(reviewSnippets, snippet)
+					}
+					maps.PlaceAnswerSources = &aiplatformpb.GroundingChunk_Maps_PlaceAnswerSources{
+						ReviewSnippets: reviewSnippets,
+					}
+				}
+				aiplGc := &aiplatformpb.GroundingChunk{
+					ChunkType: &aiplatformpb.GroundingChunk_Maps_{
+						Maps: maps,
+					},
+				}
+				groundingChunks = append(groundingChunks, aiplGc)
+			}
+			if gc.RetrievedContext != nil {
+				retrievedContext := &aiplatformpb.GroundingChunk_RetrievedContext{
+					Uri:          &gc.RetrievedContext.URI,
+					Title:        &gc.RetrievedContext.Title,
+					Text:         &gc.RetrievedContext.Text,
+					DocumentName: &gc.RetrievedContext.DocumentName,
+				}
+				if gc.RetrievedContext.RAGChunk != nil && gc.RetrievedContext.RAGChunk.PageSpan != nil {
+					retrievedContext.ContextDetails = &aiplatformpb.GroundingChunk_RetrievedContext_RagChunk{
+						RagChunk: &aiplatformpb.RagChunk{
+							Text: gc.RetrievedContext.RAGChunk.Text,
+							PageSpan: &aiplatformpb.RagChunk_PageSpan{
+								FirstPage: gc.RetrievedContext.RAGChunk.PageSpan.FirstPage,
+								LastPage:  gc.RetrievedContext.RAGChunk.PageSpan.LastPage,
+							},
+						},
+					}
+				}
+				aiplGc := &aiplatformpb.GroundingChunk{
+					ChunkType: &aiplatformpb.GroundingChunk_RetrievedContext_{
+						RetrievedContext: retrievedContext,
+					},
+				}
+				groundingChunks = append(groundingChunks, aiplGc)
+			}
+			if gc.Web != nil {
+				web := &aiplatformpb.GroundingChunk_Web{
+					Uri:   &gc.Web.URI,
+					Title: &gc.Web.Title,
+				}
+				aiplGc := &aiplatformpb.GroundingChunk{
+					ChunkType: &aiplatformpb.GroundingChunk_Web_{
+						Web: web,
+					},
+				}
+				groundingChunks = append(groundingChunks, aiplGc)
+			}
+		}
+		metadata.GroundingMetadata.GroundingChunks = groundingChunks
+
+		var groundingSupports []*aiplatformpb.GroundingSupport
+		for _, gs := range event.GroundingMetadata.GroundingSupports {
+			aiplGs := &aiplatformpb.GroundingSupport{
+				GroundingChunkIndices: gs.GroundingChunkIndices,
+				ConfidenceScores:      gs.ConfidenceScores,
+			}
+			if gs.Segment != nil {
+				aiplGs.Segment = &aiplatformpb.Segment{
+					PartIndex:  gs.Segment.PartIndex,
+					StartIndex: gs.Segment.StartIndex,
+					EndIndex:   gs.Segment.EndIndex,
+					Text:       gs.Segment.Text,
+				}
+			}
+			groundingSupports = append(groundingSupports, aiplGs)
+		}
+		metadata.GroundingMetadata.GroundingSupports = groundingSupports
+	}
+	return metadata, nil
+}
+
+func createGroundingMetadata(metadata *aiplatformpb.GroundingMetadata) *genai.GroundingMetadata {
+	if metadata == nil {
+		return nil
+	}
+
+	out := &genai.GroundingMetadata{
+		WebSearchQueries: metadata.WebSearchQueries,
+		RetrievalQueries: metadata.RetrievalQueries,
+	}
+
+	// Handle string pointer for Context Token
+	if metadata.GoogleMapsWidgetContextToken != nil {
+		out.GoogleMapsWidgetContextToken = *metadata.GoogleMapsWidgetContextToken
+	}
+
+	// Search Entry Point
+	if metadata.SearchEntryPoint != nil {
+		out.SearchEntryPoint = &genai.SearchEntryPoint{
+			RenderedContent: metadata.SearchEntryPoint.RenderedContent,
+			SDKBlob:         metadata.SearchEntryPoint.SdkBlob,
+		}
+	}
+
+	// Retrieval Metadata
+	if metadata.RetrievalMetadata != nil {
+		out.RetrievalMetadata = &genai.RetrievalMetadata{
+			GoogleSearchDynamicRetrievalScore: metadata.RetrievalMetadata.GoogleSearchDynamicRetrievalScore,
+		}
+	}
+
+	// Grounding Chunks
+	if len(metadata.GroundingChunks) > 0 {
+		var chunks []*genai.GroundingChunk
+		for _, chunk := range metadata.GroundingChunks {
+			newChunk := &genai.GroundingChunk{}
+
+			// Handle 'Maps' Chunk
+			if maps := chunk.GetMaps(); maps != nil {
+				newMaps := &genai.GroundingChunkMaps{
+					URI:     derefString(maps.Uri),
+					Title:   derefString(maps.Title),
+					Text:    derefString(maps.Text),
+					PlaceID: derefString(maps.PlaceId),
+				}
+
+				if maps.PlaceAnswerSources != nil {
+					newMaps.PlaceAnswerSources = &genai.GroundingChunkMapsPlaceAnswerSources{}
+					for _, snippet := range maps.PlaceAnswerSources.ReviewSnippets {
+						newSnippet := &genai.GroundingChunkMapsPlaceAnswerSourcesReviewSnippet{
+							Review:        snippet.ReviewId,
+							GoogleMapsURI: snippet.GoogleMapsUri,
+						}
+						newMaps.PlaceAnswerSources.ReviewSnippets = append(newMaps.PlaceAnswerSources.ReviewSnippets, newSnippet)
+					}
+				}
+				newChunk.Maps = newMaps
+			}
+
+			// Handle 'RetrievedContext' Chunk
+			if rc := chunk.GetRetrievedContext(); rc != nil {
+				newRC := &genai.GroundingChunkRetrievedContext{
+					URI:          derefString(rc.Uri),
+					Title:        derefString(rc.Title),
+					Text:         derefString(rc.Text),
+					DocumentName: derefString(rc.DocumentName),
+				}
+
+				// Handle RAG Chunk (oneof in pb, usually a nested struct in genai)
+				if rag := rc.GetRagChunk(); rag != nil {
+					newRC.RAGChunk = &genai.RAGChunk{
+						Text: rag.Text,
+					}
+					if rag.PageSpan != nil {
+						newRC.RAGChunk.PageSpan = &genai.RAGChunkPageSpan{
+							FirstPage: rag.PageSpan.FirstPage,
+							LastPage:  rag.PageSpan.LastPage,
+						}
+					}
+				}
+				newChunk.RetrievedContext = newRC
+			}
+
+			// Handle 'Web' Chunk
+			if web := chunk.GetWeb(); web != nil {
+				newChunk.Web = &genai.GroundingChunkWeb{
+					URI:   derefString(web.Uri),
+					Title: derefString(web.Title),
+				}
+			}
+
+			chunks = append(chunks, newChunk)
+		}
+		out.GroundingChunks = chunks
+	}
+
+	// Grounding Supports
+	if len(metadata.GroundingSupports) > 0 {
+		var supports []*genai.GroundingSupport
+		for _, gs := range metadata.GroundingSupports {
+			newSupport := &genai.GroundingSupport{
+				GroundingChunkIndices: gs.GroundingChunkIndices,
+				ConfidenceScores:      gs.ConfidenceScores,
+			}
+
+			if gs.Segment != nil {
+				newSupport.Segment = &genai.Segment{
+					PartIndex:  gs.Segment.PartIndex,
+					StartIndex: gs.Segment.StartIndex,
+					EndIndex:   gs.Segment.EndIndex,
+					Text:       gs.Segment.Text,
+				}
+			}
+			supports = append(supports, newSupport)
+		}
+		out.GroundingSupports = supports
+	}
+
+	return out
+}
+
+// derefString is a helper to safely dereference string pointers
+// Returns empty string if pointer is nil
+func derefString(s *string) string {
+	if s == nil {
+		return ""
+	}
+	return *s
 }
