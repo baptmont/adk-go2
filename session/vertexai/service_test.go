@@ -28,11 +28,12 @@ import (
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/google/uuid"
-	"google.golang.org/adk/model"
-	"google.golang.org/adk/session"
 	"google.golang.org/api/option"
 	"google.golang.org/genai"
 	"google.golang.org/grpc"
+
+	"google.golang.org/adk/model"
+	"google.golang.org/adk/session"
 )
 
 const (
@@ -271,7 +272,8 @@ func Test_vertexaiService_Get(t *testing.T) {
 				AppName: EngineId2, UserID: "user", SessionID: "s1",
 			},
 			wantEvents: []*session.Event{
-				{ID: "1", Author: "user", InvocationID: "test", Timestamp: time.Time{}.Add(1),
+				{
+					ID: "1", Author: "user", InvocationID: "test", Timestamp: time.Time{}.Add(1),
 					LLMResponse: model.LLMResponse{
 						Content: &genai.Content{},
 					},
@@ -279,7 +281,8 @@ func Test_vertexaiService_Get(t *testing.T) {
 						StateDelta: map[string]any{},
 					},
 				},
-				{ID: "2", Author: "user", InvocationID: "test", Timestamp: time.Time{}.Add(2),
+				{
+					ID: "2", Author: "user", InvocationID: "test", Timestamp: time.Time{}.Add(2),
 					LLMResponse: model.LLMResponse{
 						Content: &genai.Content{},
 					},
@@ -287,7 +290,8 @@ func Test_vertexaiService_Get(t *testing.T) {
 						StateDelta: map[string]any{},
 					},
 				},
-				{ID: "3", Author: "user", InvocationID: "test", Timestamp: time.Time{}.Add(3),
+				{
+					ID: "3", Author: "user", InvocationID: "test", Timestamp: time.Time{}.Add(3),
 					LLMResponse: model.LLMResponse{
 						Content: &genai.Content{},
 					},
@@ -295,7 +299,8 @@ func Test_vertexaiService_Get(t *testing.T) {
 						StateDelta: map[string]any{},
 					},
 				},
-				{ID: "4", Author: "user", InvocationID: "test", Timestamp: time.Time{}.Add(4),
+				{
+					ID: "4", Author: "user", InvocationID: "test", Timestamp: time.Time{}.Add(4),
 					LLMResponse: model.LLMResponse{
 						Content: &genai.Content{},
 					},
@@ -303,7 +308,8 @@ func Test_vertexaiService_Get(t *testing.T) {
 						StateDelta: map[string]any{},
 					},
 				},
-				{ID: "5", Author: "user", InvocationID: "test", Timestamp: time.Time{}.Add(5),
+				{
+					ID: "5", Author: "user", InvocationID: "test", Timestamp: time.Time{}.Add(5),
 					LLMResponse: model.LLMResponse{
 						Content: &genai.Content{},
 					},
@@ -321,7 +327,8 @@ func Test_vertexaiService_Get(t *testing.T) {
 				NumRecentEvents: 3,
 			},
 			wantEvents: []*session.Event{
-				{ID: "3", Author: "user", InvocationID: "test", Timestamp: time.Time{}.Add(3),
+				{
+					ID: "3", Author: "user", InvocationID: "test", Timestamp: time.Time{}.Add(3),
 					LLMResponse: model.LLMResponse{
 						Content: &genai.Content{},
 					},
@@ -329,7 +336,8 @@ func Test_vertexaiService_Get(t *testing.T) {
 						StateDelta: map[string]any{},
 					},
 				},
-				{ID: "4", Author: "user", InvocationID: "test", Timestamp: time.Time{}.Add(4),
+				{
+					ID: "4", Author: "user", InvocationID: "test", Timestamp: time.Time{}.Add(4),
 					LLMResponse: model.LLMResponse{
 						Content: &genai.Content{},
 					},
@@ -337,7 +345,8 @@ func Test_vertexaiService_Get(t *testing.T) {
 						StateDelta: map[string]any{},
 					},
 				},
-				{ID: "5", Author: "user", InvocationID: "test", Timestamp: time.Time{}.Add(5),
+				{
+					ID: "5", Author: "user", InvocationID: "test", Timestamp: time.Time{}.Add(5),
 					LLMResponse: model.LLMResponse{
 						Content: &genai.Content{},
 					},
@@ -356,7 +365,8 @@ func Test_vertexaiService_Get(t *testing.T) {
 			},
 			wantErr: true,
 			wantEvents: []*session.Event{
-				{ID: "4", Author: "user", InvocationID: "test", Timestamp: time.Time{}.Add(4),
+				{
+					ID: "4", Author: "user", InvocationID: "test", Timestamp: time.Time{}.Add(4),
 					LLMResponse: model.LLMResponse{
 						Content: &genai.Content{},
 					},
@@ -364,7 +374,8 @@ func Test_vertexaiService_Get(t *testing.T) {
 						StateDelta: map[string]any{},
 					},
 				},
-				{ID: "5", Author: "user", InvocationID: "test", Timestamp: time.Time{}.Add(5),
+				{
+					ID: "5", Author: "user", InvocationID: "test", Timestamp: time.Time{}.Add(5),
 					LLMResponse: model.LLMResponse{
 						Content: &genai.Content{},
 					},
@@ -384,7 +395,8 @@ func Test_vertexaiService_Get(t *testing.T) {
 			},
 			wantErr: true,
 			wantEvents: []*session.Event{
-				{ID: "4", Author: "user", InvocationID: "test", Timestamp: time.Time{}.Add(4),
+				{
+					ID: "4", Author: "user", InvocationID: "test", Timestamp: time.Time{}.Add(4),
 					LLMResponse: model.LLMResponse{
 						Content: &genai.Content{},
 					},
@@ -392,7 +404,8 @@ func Test_vertexaiService_Get(t *testing.T) {
 						StateDelta: map[string]any{},
 					},
 				},
-				{ID: "5", Author: "user", InvocationID: "test", Timestamp: time.Time{}.Add(5),
+				{
+					ID: "5", Author: "user", InvocationID: "test", Timestamp: time.Time{}.Add(5),
 					LLMResponse: model.LLMResponse{
 						Content: &genai.Content{},
 					},
@@ -1228,7 +1241,7 @@ func setupReplay(t *testing.T, filename string) ([]option.ClientOption, func(), 
 	// 1. Determine mode (Record vs Replay)
 	if os.Getenv("UPDATE_REPLAYS") == "true" {
 		t.Logf("Recording payload to %s", filePath)
-		_ = os.MkdirAll("testdata", 0755)
+		_ = os.MkdirAll("testdata", 0o755)
 
 		rec, err := rpcreplay.NewRecorder(filePath, nil)
 		if err != nil {

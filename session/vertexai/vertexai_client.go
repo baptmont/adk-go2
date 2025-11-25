@@ -22,13 +22,14 @@ import (
 	"strings"
 	"time"
 
-	"google.golang.org/adk/model"
-	"google.golang.org/adk/session"
 	"google.golang.org/api/iterator"
 	"google.golang.org/api/option"
 	"google.golang.org/genai"
 	"google.golang.org/protobuf/types/known/structpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
+
+	"google.golang.org/adk/model"
+	"google.golang.org/adk/session"
 
 	aiplatform "cloud.google.com/go/aiplatform/apiv1beta1"
 	aiplatformpb "cloud.google.com/go/aiplatform/apiv1beta1/aiplatformpb"
@@ -47,8 +48,7 @@ type vertexAiClient struct {
 	rpcClient       *aiplatform.SessionClient
 }
 
-func newVertexAiClient(ctx context.Context, location string, projectID string, reasoningEngine string,
-	opts ...option.ClientOption) (*vertexAiClient, error) {
+func newVertexAiClient(ctx context.Context, location string, projectID string, reasoningEngine string, opts ...option.ClientOption) (*vertexAiClient, error) {
 	rpcClient, err := aiplatform.NewSessionClient(ctx, opts...)
 	if err != nil {
 		return nil, fmt.Errorf(connectionErrorTemplate, err.Error())
@@ -496,7 +496,7 @@ func createAiplatformpbMetadata(event *session.Event) (*aiplatformpb.EventMetada
 						snippet := &aiplatformpb.GroundingChunk_Maps_PlaceAnswerSources_ReviewSnippet{
 							ReviewId:      source.Review,
 							GoogleMapsUri: source.GoogleMapsURI,
-							//FIXME Title: missing in source
+							// FIXME Title: missing in source
 						}
 						reviewSnippets = append(reviewSnippets, snippet)
 					}
