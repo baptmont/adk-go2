@@ -18,8 +18,9 @@ import (
 	"context"
 	"fmt"
 
-	"google.golang.org/adk/session"
 	"google.golang.org/api/option"
+
+	"google.golang.org/adk/session"
 )
 
 // VertexAiSessionService
