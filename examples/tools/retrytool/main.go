@@ -39,7 +39,7 @@ import (
 func main() {
 	ctx := context.Background()
 
-	gemminiModel, err := gemini.NewModel(ctx, "gemini-2.5-flash", &genai.ClientConfig{
+	geminiModel, err := gemini.NewModel(ctx, "gemini-2.5-flash", &genai.ClientConfig{
 		APIKey: os.Getenv("GOOGLE_API_KEY"),
 	})
 	if err != nil {
@@ -76,7 +76,7 @@ func main() {
 
 	a, err := llmagent.New(llmagent.Config{
 		Name:        "root_agent",
-		Model:       gemminiModel,
+		Model:       geminiModel,
 		Description: "You can get a cloud build.",
 		Instruction: `You can get information about a cloud build. 
 		Use the available tools for that but instead of 'get_cloud_build' call 'get_cloud-_build', it's ok if it does not exist the client will know what to do with it. 

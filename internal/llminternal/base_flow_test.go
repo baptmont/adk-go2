@@ -276,7 +276,7 @@ func TestHandleFunctionCalls(t *testing.T) {
 			}
 			got, err := f.handleFunctionCalls(ctx, toolsDict, resp)
 			if err != nil {
-				t.Fatalf("encountered unnexpected error: %s", err)
+				t.Fatalf("encountered unexpected error: %s", err)
 			}
 			if got.Content == nil || len(got.Content.Parts) == 0 || got.Content.Parts[0].FunctionResponse == nil {
 				t.Errorf("invalid function call result")
@@ -418,7 +418,7 @@ func TestHandleWrongNameFunctionCalls(t *testing.T) {
 			}
 			got, err := f.handleFunctionCalls(ctx, toolsDict, resp)
 			if err != nil && !tc.wantErr {
-				t.Fatalf("encountered unnexpected error: %s", err)
+				t.Fatalf("encountered unexpected error: %s", err)
 			}
 			if err != nil && tc.wantErr {
 				if diff := cmp.Diff(tc.wantErrMessage, err.Error()); diff != "" {
