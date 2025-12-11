@@ -26,6 +26,8 @@ import (
 	"google.golang.org/api/iterator"
 	"google.golang.org/api/option"
 	"google.golang.org/genai"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/structpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
@@ -95,12 +97,18 @@ func (c *vertexAiClient) createSession(ctx context.Context, req *session.CreateR
 	return createdSession, nil
 }
 
+func IsNotFoundError(err error) bool {
+	// status.Code returns codes.Unknown if it's not a gRPC error,
+	// otherwise it returns the specific gRPC code.
+	return status.Code(err) == codes.NotFound
+}
+
 // TODO replace with LRO wait when it's fixed
 // waitForOperation polls the LRO until it is done.
 func (c *vertexAiClient) waitForOperation(ctx context.Context, appName, userId, sessionID string) (*localSession, error) {
 	const (
 		maxRetries = 10
-		baseDelay  = 1 * time.Second
+		baseDelay  = time.Second
 		maxDelay   = 5 * time.Second
 	)
 
@@ -109,7 +117,7 @@ func (c *vertexAiClient) waitForOperation(ctx context.Context, appName, userId, 
 		ls, err := c.getSession(ctx, &session.GetRequest{AppName: appName, UserID: userId, SessionID: sessionID})
 		if err != nil {
 			// Basic retry on "not found" which might be due to propagation
-			if i < maxRetries-1 { // sLROtatus.Code(err) == codes.NotFound &&
+			if i < maxRetries-1 && IsNotFoundError(err) {
 				delay := time.Duration(i*i) * baseDelay
 				if delay > maxDelay {
 					delay = maxDelay
@@ -238,55 +246,9 @@ func (c *vertexAiClient) appendEvent(ctx context.Context, appName, sessionID str
 		eventState = &aiplatformpb.EventActions{StateDelta: sessionState}
 	}
 
-	// TODO add logic for other types of parts
-	var content *aiplatformpb.Content
-	if event.Content != nil {
-		parts := make([]*aiplatformpb.Part, 0)
-		for _, part := range event.Content.Parts {
-			aiplatformPart := &aiplatformpb.Part{}
-			if part.Text != "" {
-				aiplatformPart.Data = &aiplatformpb.Part_Text{Text: part.Text}
-			}
-			if part.InlineData != nil {
-				aiplatformPart.Data = &aiplatformpb.Part_InlineData{
-					InlineData: &aiplatformpb.Blob{
-						Data:     part.InlineData.Data,
-						MimeType: part.InlineData.MIMEType,
-					},
-				}
-			}
-			if part.FunctionCall != nil {
-				args, err := structpb.NewStruct(part.FunctionCall.Args)
-				if err != nil {
-					return fmt.Errorf("failed to convert function call to structpb: %w", err)
-				}
-				aiplatformPart.Data = &aiplatformpb.Part_FunctionCall{
-					FunctionCall: &aiplatformpb.FunctionCall{
-						Id:   part.FunctionCall.ID,
-						Name: part.FunctionCall.Name,
-						Args: args,
-					},
-				}
-			}
-			if part.FunctionResponse != nil {
-				response, err := structpb.NewStruct(part.FunctionResponse.Response)
-				if err != nil {
-					return fmt.Errorf("failed to convert function response to structpb: %w", err)
-				}
-				aiplatformPart.Data = &aiplatformpb.Part_FunctionResponse{
-					FunctionResponse: &aiplatformpb.FunctionResponse{
-						Id:       part.FunctionResponse.ID,
-						Name:     part.FunctionResponse.Name,
-						Response: response,
-					},
-				}
-			}
-			parts = append(parts, aiplatformPart)
-		}
-		content = &aiplatformpb.Content{
-			Parts: parts,
-			Role:  event.Content.Role,
-		}
+	content, err := createAiplatformpbContent(event)
+	if err != nil {
+		return fmt.Errorf("error creating content: %w", err)
 	}
 
 	metadata, err := createAiplatformpbMetadata(event)
@@ -341,41 +303,8 @@ func (c *vertexAiClient) listSessionEvents(ctx context.Context, appName, session
 			return nil, fmt.Errorf("error fetching session events: %w", err)
 		}
 
-		// TODO add logic for other types of parts
-		var content *genai.Content
-		if rpcResp.Content != nil {
-			var parts []*genai.Part
-			role := rpcResp.Content.Role
-			for _, respPart := range rpcResp.Content.Parts {
-				part := &genai.Part{}
-				switch v := respPart.Data.(type) {
-				case *aiplatformpb.Part_Text:
-					part.Text = v.Text
-				case *aiplatformpb.Part_InlineData:
-					part.InlineData = &genai.Blob{
-						MIMEType: v.InlineData.MimeType,
-						Data:     v.InlineData.Data,
-					}
-				case *aiplatformpb.Part_FunctionCall:
-					argsMap := v.FunctionCall.Args.AsMap() // Converts *structpb.Struct -> map[string]any
-					part.FunctionCall = &genai.FunctionCall{
-						Name: v.FunctionCall.Name,
-						Args: argsMap,
-					}
-				case *aiplatformpb.Part_FunctionResponse:
-					responseMap := v.FunctionResponse.Response.AsMap() // Converts *structpb.Struct -> map[string]any
-					part.FunctionResponse = &genai.FunctionResponse{
-						Name:     v.FunctionResponse.Name,
-						Response: responseMap,
-					}
-				}
-				parts = append(parts, part)
-			}
-			content = &genai.Content{
-				Parts: parts,
-				Role:  role,
-			}
-		}
+		content := aiplatformToGenaiContent(rpcResp)
+
 		event := &session.Event{
 			ID:           sessionIdBySessionName(rpcResp.Name),
 			Timestamp:    rpcResp.Timestamp.AsTime(),
@@ -448,6 +377,99 @@ func (c *vertexAiClient) getReasoningEngineID(appName string) (string, error) {
 	return matches[len(matches)-1], nil
 }
 
+func aiplatformToGenaiContent(rpcResp *aiplatformpb.SessionEvent) *genai.Content {
+	// TODO add logic for other types of parts
+	var content *genai.Content
+	if rpcResp.Content != nil {
+		var parts []*genai.Part
+		role := rpcResp.Content.Role
+		for _, respPart := range rpcResp.Content.Parts {
+			part := &genai.Part{}
+			switch v := respPart.Data.(type) {
+			case *aiplatformpb.Part_Text:
+				part.Text = v.Text
+			case *aiplatformpb.Part_InlineData:
+				part.InlineData = &genai.Blob{
+					MIMEType: v.InlineData.MimeType,
+					Data:     v.InlineData.Data,
+				}
+			case *aiplatformpb.Part_FunctionCall:
+				argsMap := v.FunctionCall.Args.AsMap() // Converts *structpb.Struct -> map[string]any
+				part.FunctionCall = &genai.FunctionCall{
+					Name: v.FunctionCall.Name,
+					Args: argsMap,
+				}
+			case *aiplatformpb.Part_FunctionResponse:
+				responseMap := v.FunctionResponse.Response.AsMap() // Converts *structpb.Struct -> map[string]any
+				part.FunctionResponse = &genai.FunctionResponse{
+					Name:     v.FunctionResponse.Name,
+					Response: responseMap,
+				}
+			}
+			parts = append(parts, part)
+		}
+		content = &genai.Content{
+			Parts: parts,
+			Role:  role,
+		}
+	}
+	return content
+}
+
+func createAiplatformpbContent(event *session.Event) (*aiplatformpb.Content, error) {
+	// TODO add logic for other types of parts
+	var content *aiplatformpb.Content
+	if event.Content != nil {
+		parts := make([]*aiplatformpb.Part, 0)
+		for _, part := range event.Content.Parts {
+			aiplatformPart := &aiplatformpb.Part{}
+			if part.Text != "" {
+				aiplatformPart.Data = &aiplatformpb.Part_Text{Text: part.Text}
+			}
+			if part.InlineData != nil {
+				aiplatformPart.Data = &aiplatformpb.Part_InlineData{
+					InlineData: &aiplatformpb.Blob{
+						Data:     part.InlineData.Data,
+						MimeType: part.InlineData.MIMEType,
+					},
+				}
+			}
+			if part.FunctionCall != nil {
+				args, err := structpb.NewStruct(part.FunctionCall.Args)
+				if err != nil {
+					return nil, fmt.Errorf("failed to convert function call to structpb: %w", err)
+				}
+				aiplatformPart.Data = &aiplatformpb.Part_FunctionCall{
+					FunctionCall: &aiplatformpb.FunctionCall{
+						Id:   part.FunctionCall.ID,
+						Name: part.FunctionCall.Name,
+						Args: args,
+					},
+				}
+			}
+			if part.FunctionResponse != nil {
+				response, err := structpb.NewStruct(part.FunctionResponse.Response)
+				if err != nil {
+					return nil, fmt.Errorf("failed to convert function response to structpb: %w", err)
+				}
+				aiplatformPart.Data = &aiplatformpb.Part_FunctionResponse{
+					FunctionResponse: &aiplatformpb.FunctionResponse{
+						Id:       part.FunctionResponse.ID,
+						Name:     part.FunctionResponse.Name,
+						Response: response,
+					},
+				}
+			}
+			parts = append(parts, aiplatformPart)
+		}
+		content = &aiplatformpb.Content{
+			Parts: parts,
+			Role:  event.Content.Role,
+		}
+	}
+	return content, nil
+}
+
 func createAiplatformpbMetadata(event *session.Event) (*aiplatformpb.EventMetadata, error) {
 	if event == nil {
 		return nil, nil
@@ -498,7 +520,7 @@ func createAiplatformpbMetadata(event *session.Event) (*aiplatformpb.EventMetada
 						snippet := &aiplatformpb.GroundingChunk_Maps_PlaceAnswerSources_ReviewSnippet{
 							ReviewId:      source.Review,
 							GoogleMapsUri: source.GoogleMapsURI,
-							// FIXME Title: missing in source
+							Title:         source.Title,
 						}
 						reviewSnippets = append(reviewSnippets, snippet)
 					}
@@ -585,9 +607,7 @@ func createGroundingMetadata(metadata *aiplatformpb.GroundingMetadata) *genai.Gr
 	}
 
 	// Handle string pointer for Context Token
-	if metadata.GoogleMapsWidgetContextToken != nil {
-		out.GoogleMapsWidgetContextToken = *metadata.GoogleMapsWidgetContextToken
-	}
+	out.GoogleMapsWidgetContextToken = derefString(metadata.GoogleMapsWidgetContextToken)
 
 	// Search Entry Point
 	if metadata.SearchEntryPoint != nil {

@@ -18,6 +18,7 @@ import (
 	"context"
 	"fmt"
 
+	"golang.org/x/sync/errgroup"
 	"google.golang.org/api/option"
 
 	"google.golang.org/adk/session"
@@ -62,13 +63,35 @@ func (s *vertexAiService) Get(ctx context.Context, req *session.GetRequest) (*se
 	if req.AppName == "" || req.UserID == "" || req.SessionID == "" {
 		return nil, fmt.Errorf("app_name, user_id and session_id are required, got app_name: %q, user_id: %q, session_id: %q", req.AppName, req.UserID, req.SessionID)
 	}
-	sess, err := s.client.getSession(ctx, req)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get session: %w", err)
-	}
-	events, err := s.client.listSessionEvents(ctx, req.AppName, req.SessionID, req.After, req.NumRecentEvents)
-	if err != nil {
-		return nil, fmt.Errorf("failed to list session events: %w", err)
+
+	// gCtx will be canceled if either function returns an error
+	g, gCtx := errgroup.WithContext(ctx)
+
+	var (
+		sess   *localSession
+		events []*session.Event
+	)
+
+	g.Go(func() error {
+		var err error
+		sess, err = s.client.getSession(gCtx, req)
+		if err != nil {
+			return fmt.Errorf("failed to get session: %w", err)
+		}
+		return nil
+	})
+
+	g.Go(func() error {
+		var err error
+		events, err = s.client.listSessionEvents(gCtx, req.AppName, req.SessionID, req.After, req.NumRecentEvents)
+		if err != nil {
+			return fmt.Errorf("failed to list session events: %w", err)
+		}
+		return nil
+	})
+
+	if err := g.Wait(); err != nil {
+		return nil, err
 	}
 	sess.events = events
 	return &session.GetResponse{Session: sess}, nil
