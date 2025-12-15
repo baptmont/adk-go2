@@ -450,7 +450,7 @@ func TestTransferToAgentToolRun(t *testing.T) {
 		curTool := &llminternal.TransferToAgentTool{}
 
 		invCtx := icontext.NewInvocationContext(t.Context(), icontext.InvocationContextParams{})
-		ctx := toolinternal.NewToolContext(invCtx, "", &session.EventActions{})
+		ctx := toolinternal.NewToolContext(invCtx, "", &session.EventActions{}, nil)
 
 		wantAgentName := "TestAgent"
 		args := map[string]any{"agent_name": wantAgentName}
@@ -476,7 +476,7 @@ func TestTransferToAgentToolRun(t *testing.T) {
 		for _, tc := range testCases {
 			t.Run(tc.name, func(t *testing.T) {
 				curTool := &llminternal.TransferToAgentTool{}
-				ctx := toolinternal.NewToolContext(icontext.NewInvocationContext(t.Context(), icontext.InvocationContextParams{}), "", nil)
+				ctx := toolinternal.NewToolContext(icontext.NewInvocationContext(t.Context(), icontext.InvocationContextParams{}), "", nil, nil)
 				if got, err := curTool.Run(ctx, tc.args); err == nil {
 					t.Fatalf("Run(%v) = (%v, %v), want error", tc.args, got, err)
 				}

@@ -23,9 +23,11 @@ import (
 	"google.golang.org/genai"
 
 	"google.golang.org/adk/agent"
+	icontext "google.golang.org/adk/internal/context"
 	"google.golang.org/adk/internal/utils"
 	"google.golang.org/adk/model"
 	"google.golang.org/adk/session"
+	"google.golang.org/adk/tool"
 	"google.golang.org/adk/tool/toolconfirmation"
 )
 
@@ -34,6 +36,21 @@ func RequestConfirmationRequestProcessor(ctx agent.InvocationContext, req *model
 		llmAgent := asLLMAgent(ctx.Agent())
 		if llmAgent == nil {
 			return // In python, no error is yielded.
+		}
+
+		tools := Reveal(llmAgent).Tools
+		for _, toolSet := range Reveal(llmAgent).Toolsets {
+			tsTools, err := toolSet.Tools(icontext.NewReadonlyContext(ctx))
+			if err != nil {
+				yield(nil, fmt.Errorf("failed to extract tools from the tool set %q: %w", toolSet.Name(), err))
+				return
+			}
+
+			tools = append(tools, tsTools...)
+		}
+		toolsmap := make(map[string]tool.Tool)
+		for _, tool := range tools {
+			toolsmap[tool.Name()] = tool
 		}
 
 		var events []*session.Event
@@ -61,7 +78,7 @@ func RequestConfirmationRequestProcessor(ctx agent.InvocationContext, req *model
 				var tc toolconfirmation.ToolConfirmation
 				if funcResp.Response != nil {
 					resp, hasResponseKey := funcResp.Response["response"]
-					// ADK web client will send a request that is always encapsulated in a  'response' key.
+					// ADK web client will send a request that is always encapsulated in a 'response' key.
 					if hasResponseKey && len(funcResp.Response) == 1 {
 						if jsonString, ok := resp.(string); ok {
 							err := json.Unmarshal([]byte(jsonString), &tc)
@@ -97,9 +114,9 @@ func RequestConfirmationRequestProcessor(ctx agent.InvocationContext, req *model
 			// Find the system generated FunctionCall event requesting the tool confirmation
 			calls := utils.FunctionCalls(event.Content)
 			if len(calls) == 0 {
-				return
+				continue
 			}
-			toolsToResumeConfirmation := map[string]toolconfirmation.ToolConfirmation{}
+			toolsToResumeConfirmation := map[string]*toolconfirmation.ToolConfirmation{}
 			toolsToResumeWithArgs := map[string]genai.FunctionCall{}
 			for _, functionCall := range calls {
 				confirmation, ok := requestConfirmationFR[functionCall.ID]
@@ -123,7 +140,7 @@ func RequestConfirmationRequestProcessor(ctx agent.InvocationContext, req *model
 					continue
 				}
 
-				toolsToResumeConfirmation[originalFunctionCall.ID] = confirmation
+				toolsToResumeConfirmation[originalFunctionCall.ID] = &confirmation
 				toolsToResumeWithArgs[originalFunctionCall.ID] = originalFunctionCall
 			}
 
@@ -150,6 +167,20 @@ func RequestConfirmationRequestProcessor(ctx agent.InvocationContext, req *model
 			}
 			if len(toolsToResumeConfirmation) == 0 {
 				continue
+			}
+
+			parts := make([]*genai.Part, 0)
+			for tname, fc := range toolsToResumeWithArgs {
+				if _, ok := toolsToResumeConfirmation[tname]; ok {
+					parts = append(parts, &genai.Part{FunctionCall: &fc})
+				}
+			}
+
+			ev, err := f.handleFunctionCalls(ctx, toolsmap, &model.LLMResponse{
+				Content: &genai.Content{Parts: parts, Role: genai.RoleUser},
+			}, toolsToResumeConfirmation)
+			if !yield(ev, err) {
+				return
 			}
 		}
 	}

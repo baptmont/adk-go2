@@ -50,7 +50,7 @@ func (ia *internalArtifacts) Save(ctx context.Context, name string, data *genai.
 	return resp, nil
 }
 
-func NewToolContext(ctx agent.InvocationContext, functionCallID string, actions *session.EventActions) tool.Context {
+func NewToolContext(ctx agent.InvocationContext, functionCallID string, actions *session.EventActions, confirmation *toolconfirmation.ToolConfirmation) tool.Context {
 	if functionCallID == "" {
 		functionCallID = uuid.NewString()
 	}
@@ -71,6 +71,7 @@ func NewToolContext(ctx agent.InvocationContext, functionCallID string, actions 
 			Artifacts:    ctx.Artifacts(),
 			eventActions: actions,
 		},
+		toolConfirmation: confirmation,
 	}
 }
 
