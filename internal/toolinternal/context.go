@@ -99,3 +99,15 @@ func (c *toolContext) AgentName() string {
 func (c *toolContext) SearchMemory(ctx context.Context, query string) (*memory.SearchResponse, error) {
 	return c.invocationContext.Memory().Search(ctx, query)
 }
+
+func (c *toolContext) PluginManager() tool.PluginManager {
+	plugin := c.invocationContext.PluginManager()
+	if plugin == nil {
+		return nil
+	}
+	v, ok := plugin.(tool.PluginManager)
+	if !ok {
+		return nil
+	}
+	return v
+}

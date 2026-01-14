@@ -169,8 +169,8 @@ func (a *agent) Run(ctx InvocationContext) iter.Seq2[*session.Event, error] {
 			userContent:   ctx.UserContent(),
 			runConfig:     ctx.RunConfig(),
 			endInvocation: ctx.Ended(),
+			pluginManager: ctx.PluginManager(),
 		}
-
 		event, err := runBeforeAgentCallbacks(ctx)
 		if event != nil || err != nil {
 			if !yield(event, err) {
@@ -218,11 +218,30 @@ func getAuthorForEvent(ctx InvocationContext, event *session.Event) string {
 // then it skips agent run and returns callback result.
 func runBeforeAgentCallbacks(ctx InvocationContext) (*session.Event, error) {
 	agent := ctx.Agent()
+	pluginManager := ctx.PluginManager()
 
 	callbackCtx := &callbackContext{
 		Context:           ctx,
 		invocationContext: ctx,
 		actions:           &session.EventActions{StateDelta: make(map[string]any)},
+	}
+
+	if pluginManager != nil {
+		content, err := pluginManager.RunBeforeAgentCallback(callbackCtx)
+		if err != nil {
+			return nil, fmt.Errorf("failed to run plugin before agent callback: %w", err)
+		}
+		if content != nil {
+			event := session.NewEvent(ctx.InvocationID())
+			event.LLMResponse = model.LLMResponse{
+				Content: content,
+			}
+			event.Author = agent.Name()
+			event.Branch = ctx.Branch()
+			event.Actions = *callbackCtx.actions
+			ctx.EndInvocation()
+			return event, nil
+		}
 	}
 
 	for _, callback := range ctx.Agent().internal().beforeAgentCallbacks {
@@ -261,11 +280,29 @@ func runBeforeAgentCallbacks(ctx InvocationContext) (*session.Event, error) {
 // then it create a new event with the new content and state delta.
 func runAfterAgentCallbacks(ctx InvocationContext) (*session.Event, error) {
 	agent := ctx.Agent()
+	pluginManager := ctx.PluginManager()
 
 	callbackCtx := &callbackContext{
 		Context:           ctx,
 		invocationContext: ctx,
 		actions:           &session.EventActions{StateDelta: make(map[string]any)},
+	}
+
+	if pluginManager != nil {
+		content, err := pluginManager.RunAfterAgentCallback(callbackCtx)
+		if err != nil {
+			return nil, fmt.Errorf("failed to run plugin after agent callback: %w", err)
+		}
+		if content != nil {
+			event := session.NewEvent(ctx.InvocationID())
+			event.LLMResponse = model.LLMResponse{
+				Content: content,
+			}
+			event.Author = agent.Name()
+			event.Branch = ctx.Branch()
+			event.Actions = *callbackCtx.actions
+			return event, nil
+		}
 	}
 
 	for _, callback := range agent.internal().afterAgentCallbacks {
@@ -391,6 +428,7 @@ type invocationContext struct {
 	userContent   *genai.Content
 	runConfig     *RunConfig
 	endInvocation bool
+	pluginManager PluginManager
 }
 
 func (c *invocationContext) Agent() Agent {
@@ -431,4 +469,8 @@ func (c *invocationContext) EndInvocation() {
 
 func (c *invocationContext) Ended() bool {
 	return c.endInvocation
+}
+
+func (c *invocationContext) PluginManager() PluginManager {
+	return c.pluginManager
 }
