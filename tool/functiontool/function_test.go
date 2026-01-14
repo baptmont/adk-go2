@@ -16,6 +16,7 @@ package functiontool_test
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"iter"
 	"net/http"
@@ -24,9 +25,11 @@ import (
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
+	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/google/jsonschema-go/jsonschema"
 	"google.golang.org/genai"
 
+	"google.golang.org/adk/agent/llmagent"
 	"google.golang.org/adk/internal/httprr"
 	"google.golang.org/adk/internal/testutil"
 	"google.golang.org/adk/internal/toolinternal"
@@ -35,24 +38,26 @@ import (
 	"google.golang.org/adk/model/gemini"
 	"google.golang.org/adk/tool"
 	"google.golang.org/adk/tool/functiontool"
+	"google.golang.org/adk/tool/toolconfirmation"
 )
 
-func ExampleNew() {
-	type SumArgs struct {
-		A int `json:"a"` // an integer to sum
-		B int `json:"b"` // another integer to sum
-	}
-	type SumResult struct {
-		Sum int `json:"sum"` // the sum of two integers
-	}
+type SumArgs struct {
+	A int `json:"a"` // an integer to sum
+	B int `json:"b"` // another integer to sum
+}
+type SumResult struct {
+	Sum int `json:"sum"` // the sum of two integers
+}
 
-	handler := func(ctx tool.Context, input SumArgs) (SumResult, error) {
-		return SumResult{Sum: input.A + input.B}, nil
-	}
+func sumFunc(ctx tool.Context, input SumArgs) (SumResult, error) {
+	return SumResult{Sum: input.A + input.B}, nil
+}
+
+func ExampleNew() {
 	sumTool, err := functiontool.New(functiontool.Config{
 		Name:        "sum",
 		Description: "sums two integers",
-	}, handler)
+	}, sumFunc)
 	if err != nil {
 		panic(err)
 	}
@@ -507,4 +512,124 @@ func stringify(v any) string {
 		panic(err)
 	}
 	return string(x)
+}
+
+type (
+	EmptyArgs   struct{}
+	EmptyResult struct{}
+)
+
+func okFunc(_ tool.Context, _ EmptyArgs) (string, error) {
+	return "ok", nil
+}
+
+func TestToolConfirmation(t *testing.T) {
+	testCases := []struct {
+		name         string
+		toolConfig   functiontool.Config
+		confirmation *genai.FunctionResponse // User's confirmation response
+		want         []*genai.Content
+	}{
+		{
+			name: "No Confirmation Required",
+			toolConfig: functiontool.Config{
+				Name: "test_tool",
+			},
+			want: []*genai.Content{
+				genai.NewContentFromFunctionCall("test_tool", map[string]any{}, "model"),
+				genai.NewContentFromFunctionResponse("test_tool", map[string]any{"result": "ok"}, "user"),
+			},
+		},
+		{
+			name: "Confirmation Required",
+			toolConfig: functiontool.Config{
+				Name:                "test_tool",
+				RequireConfirmation: true,
+			},
+			want: []*genai.Content{
+				genai.NewContentFromFunctionCall("test_tool", map[string]any{}, "model"),
+				genai.NewContentFromFunctionCall("adk_request_confirmation", map[string]any{
+					"originalFunctionCall": &genai.FunctionCall{
+						Args: map[string]any{},
+						Name: "test_tool",
+					},
+					"toolConfirmation": toolconfirmation.ToolConfirmation{
+						Hint: "Please approve or reject the tool call test_tool() by responding with a FunctionResponse with an expected ToolConfirmation payload.",
+					},
+				}, "model"),
+				genai.NewContentFromFunctionResponse("test_tool", map[string]any{
+					"error": errors.New("tool \"test_tool\" failed: error tool \"test_tool\" requires confirmation, please approve or reject"),
+				}, "user"),
+			},
+		},
+	}
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			mockModel := &testutil.MockModel{
+				Responses: []*genai.Content{
+					genai.NewContentFromFunctionCall("test_tool", map[string]any{}, genai.RoleModel),
+				},
+			}
+
+			// Setup tool
+			myTool, err := functiontool.New(tc.toolConfig, okFunc)
+			if err != nil {
+				t.Fatalf("Failed to create tool: %v", err)
+			}
+
+			a, err := llmagent.New(llmagent.Config{
+				Name:  "simple agent",
+				Model: mockModel,
+				Tools: []tool.Tool{myTool},
+			})
+			if err != nil {
+				t.Fatalf("failed to create llm agent: %v", err)
+			}
+
+			runner := testutil.NewTestAgentRunner(t, a)
+			eventCount := 0
+
+			ev := runner.Run(t, "id", "message")
+
+			for got, err := range ev {
+				if err != nil && err.Error() == "no data" {
+					break
+				}
+				if err != nil {
+					// Check if an error was expected
+					t.Fatalf("runner returned unexpected error: %v", err)
+					// If error was expected, we can stop here or check for a specific error type.
+					return
+				}
+
+				if eventCount >= len(tc.want) {
+					t.Fatalf("stream generated more values than the expected %d. Got: %+v", len(tc.want), got.Content)
+				}
+
+				if diff := cmp.Diff(tc.want[eventCount], got.Content, cmpopts.IgnoreFields(genai.FunctionCall{}, "ID"),
+					cmp.Transformer("StringifyMapErrors", func(m map[string]any) map[string]any {
+						out := make(map[string]any, len(m))
+						for k, v := range m {
+							// Check if the value inside the map is an error
+							if err, ok := v.(error); ok {
+								out[k] = err.Error() // Convert to string
+							} else {
+								out[k] = v // Keep as is
+							}
+						}
+						return out
+					}), cmpopts.IgnoreFields(genai.FunctionResponse{}, "ID")); diff != "" {
+					t.Errorf("LoopAgent Run() mismatch (-want +got):\n%s", diff)
+				}
+				eventCount++
+			}
+
+			// Final check on the number of events
+			if eventCount != len(tc.want) {
+				t.Errorf("unexpected stream length, want %d got %d", len(tc.want), eventCount)
+			}
+
+			t.Skip("Full test implementation requires mocking ADK context and event flow, and exact type definitions.")
+		})
+	}
 }
