@@ -1,0 +1,303 @@
+// Copyright 2026 Google LLC
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+package plugininternal
+
+import (
+	"fmt"
+	"sync"
+	"time"
+
+	"google.golang.org/genai"
+
+	"google.golang.org/adk/agent"
+	"google.golang.org/adk/model"
+	"google.golang.org/adk/plugin"
+	"google.golang.org/adk/session"
+	"google.golang.org/adk/tool"
+)
+
+type PluginConfig struct {
+	Plugins        []plugin.Plugin
+	ExecutionOrder plugin.ExecutionOrder
+	CloseTimeout   time.Duration
+}
+
+// PluginManager manages the registration and execution of plugins.
+type PluginManager struct {
+	plugins        []plugin.Plugin
+	executionOrder plugin.ExecutionOrder
+	closeTimeout   time.Duration
+	mu             sync.RWMutex
+}
+
+// NewPluginManager creates a new PluginManager.
+func NewPluginManager(cfg PluginConfig) *PluginManager {
+	pm := &PluginManager{
+		executionOrder: cfg.ExecutionOrder,
+		closeTimeout:   cfg.CloseTimeout,
+		plugins:        make([]plugin.Plugin, 0, len(cfg.Plugins)),
+	}
+
+	// Register plugins defined in the config
+	for _, p := range cfg.Plugins {
+		pm.RegisterPlugin(p)
+	}
+
+	return pm
+}
+
+// RegisterPlugin adds a new plugin to the manager.
+func (pm *PluginManager) RegisterPlugin(plugin plugin.Plugin) error {
+	pm.mu.Lock()
+	defer pm.mu.Unlock()
+
+	for _, p := range pm.plugins {
+		if p.Name == plugin.Name {
+			return fmt.Errorf("plugin with name '%s' already registered", plugin.Name)
+		}
+	}
+	pm.plugins = append(pm.plugins, plugin)
+	return nil
+}
+
+// RunOnUserMessageCallback runs the OnUserMessageCallback for all plugins.
+func (pm *PluginManager) RunOnUserMessageCallback(cctx agent.InvocationContext, userMessage *genai.Content) (*genai.Content, error) {
+	pm.mu.RLock()
+	defer pm.mu.RUnlock()
+	for _, plugin := range pm.plugins {
+		if plugin.OnUserMessageCallback != nil {
+			newContent, err := plugin.OnUserMessageCallback(cctx, userMessage)
+			if err != nil {
+				return nil, err
+			}
+			if newContent != nil {
+				return newContent, nil // Early exit
+			}
+		}
+	}
+	return nil, nil
+}
+
+// RunBeforeRunCallback runs the BeforeRunCallback for all plugins.
+func (pm *PluginManager) RunBeforeRunCallback(cctx agent.InvocationContext) (*genai.Content, error) {
+	pm.mu.RLock()
+	defer pm.mu.RUnlock()
+	for _, plugin := range pm.plugins {
+		if plugin.BeforeRunCallback != nil {
+			newContent, err := plugin.BeforeRunCallback(cctx)
+			if err != nil {
+				return nil, err
+			}
+			if newContent != nil {
+				return newContent, nil // Early exit
+			}
+		}
+	}
+	return nil, nil
+}
+
+// RunAfterRunCallback runs the AfterRunCallback for all plugins.
+func (pm *PluginManager) RunAfterRunCallback(cctx agent.InvocationContext) {
+	pm.mu.RLock()
+	defer pm.mu.RUnlock()
+	for _, plugin := range pm.plugins {
+		if plugin.AfterRunCallback != nil {
+			plugin.AfterRunCallback(cctx)
+		}
+	}
+}
+
+// RunOnEventCallback runs the OnEventCallback for all plugins.
+func (pm *PluginManager) RunOnEventCallback(cctx agent.InvocationContext, event *session.Event) (*session.Event, error) {
+	pm.mu.RLock()
+	defer pm.mu.RUnlock()
+	for _, plugin := range pm.plugins {
+		if plugin.OnEventCallback != nil {
+			// TODO: Replace 'any' with the actual Event type
+			newEvent, err := plugin.OnEventCallback(cctx, event)
+			if err != nil {
+				return nil, err
+			}
+			if newEvent != nil {
+				return newEvent, nil // Early exit
+			}
+		}
+	}
+	return nil, nil
+}
+
+// RunBeforeAgentCallback runs the BeforeAgentCallback for all plugins.
+func (pm *PluginManager) RunBeforeAgentCallback(cctx agent.CallbackContext) (*genai.Content, error) {
+	pm.mu.RLock()
+	defer pm.mu.RUnlock()
+	for _, plugin := range pm.plugins {
+		if plugin.BeforeAgentCallback != nil {
+			newContent, err := plugin.BeforeAgentCallback(cctx)
+			if err != nil {
+				return nil, err
+			}
+			if newContent != nil {
+				return newContent, nil // Early exit
+			}
+		}
+	}
+	return nil, nil
+}
+
+// RunAfterAgentCallback runs the AfterAgentCallback for all plugins.
+func (pm *PluginManager) RunAfterAgentCallback(cctx agent.CallbackContext) (*genai.Content, error) {
+	pm.mu.RLock()
+	defer pm.mu.RUnlock()
+	for _, plugin := range pm.plugins {
+		if plugin.AfterAgentCallback != nil {
+			newContent, err := plugin.AfterAgentCallback(cctx)
+			if err != nil {
+				return nil, err
+			}
+			if newContent != nil {
+				return newContent, nil // Early exit
+			}
+		}
+	}
+	return nil, nil
+}
+
+// RunBeforeToolCallback runs the BeforeToolCallback for all plugins.
+func (pm *PluginManager) RunBeforeToolCallback(ctx tool.Context, tool tool.Tool, args map[string]any) (map[string]any, error) {
+	pm.mu.RLock()
+	defer pm.mu.RUnlock()
+	for _, plugin := range pm.plugins {
+		if plugin.BeforeToolCallback != nil {
+			newArgs, err := plugin.BeforeToolCallback(ctx, tool, args)
+			if err != nil {
+				return nil, err
+			}
+			if newArgs != nil {
+				return newArgs, nil // Early exit
+			}
+		}
+	}
+	return nil, nil
+}
+
+// RunAfterToolCallback runs the AfterToolCallback for all plugins.
+func (pm *PluginManager) RunAfterToolCallback(ctx tool.Context, tool tool.Tool, args, result map[string]any, err error) (map[string]any, error) {
+	pm.mu.RLock()
+	defer pm.mu.RUnlock()
+	for _, plugin := range pm.plugins {
+		if plugin.AfterToolCallback != nil {
+			newResult, err := plugin.AfterToolCallback(ctx, tool, args, result, err)
+			if err != nil {
+				return nil, err
+			}
+			if newResult != nil {
+				return newResult, nil // Early exit
+			}
+		}
+	}
+	return nil, nil
+}
+
+// RunOnToolErrorCallback runs the OnToolErrorCallback for all plugins.
+func (pm *PluginManager) RunOnToolErrorCallback(ctx tool.Context, tool tool.Tool, args map[string]any, err error) (map[string]any, error) {
+	pm.mu.RLock()
+	defer pm.mu.RUnlock()
+	for _, plugin := range pm.plugins {
+		if plugin.OnToolErrorCallback != nil {
+			newResult, err := plugin.OnToolErrorCallback(ctx, tool, args, err)
+			if err != nil {
+				return nil, err
+			}
+			if newResult != nil {
+				return newResult, nil // Early exit
+			}
+		}
+	}
+	return nil, nil
+}
+
+// RunBeforeModelCallback runs the BeforeModelCallback for all plugins.
+func (pm *PluginManager) RunBeforeModelCallback(cctx agent.CallbackContext, llmRequest *model.LLMRequest) (*model.LLMResponse, error) {
+	pm.mu.RLock()
+	defer pm.mu.RUnlock()
+	for _, plugin := range pm.plugins {
+		if plugin.BeforeModelCallback != nil {
+			newResponse, err := plugin.BeforeModelCallback(cctx, llmRequest)
+			if err != nil {
+				return nil, err
+			}
+			if newResponse != nil {
+				return newResponse, nil // Early exit
+			}
+		}
+	}
+	return nil, nil
+}
+
+// RunAfterModelCallback runs the AfterModelCallback for all plugins.
+func (pm *PluginManager) RunAfterModelCallback(cctx agent.CallbackContext, llmResponse *model.LLMResponse, llmResponseError error) (*model.LLMResponse, error) {
+	pm.mu.RLock()
+	defer pm.mu.RUnlock()
+	for _, plugin := range pm.plugins {
+		if plugin.AfterModelCallback != nil {
+			newResponse, err := plugin.AfterModelCallback(cctx, llmResponse, llmResponseError)
+			if err != nil {
+				return nil, err
+			}
+			if newResponse != nil {
+				return newResponse, nil // Early exit
+			}
+		}
+	}
+	return nil, nil
+}
+
+// RunOnModelErrorCallback runs the OnModelErrorCallback for all plugins.
+func (pm *PluginManager) RunOnModelErrorCallback(cctx agent.CallbackContext, llmRequest *model.LLMRequest, llmResponseError error) (*model.LLMResponse, error) {
+	pm.mu.RLock()
+	defer pm.mu.RUnlock()
+	for _, plugin := range pm.plugins {
+		if plugin.OnModelErrorCallback != nil {
+			newResponse, err := plugin.OnModelErrorCallback(cctx, llmRequest, llmResponseError)
+			if err != nil {
+				return nil, err
+			}
+			if newResponse != nil {
+				return newResponse, nil // Early exit
+			}
+		}
+	}
+	return nil, nil
+}
+
+// Close calls the CloseFunc on all registered plugins.
+func (pm *PluginManager) Close() error {
+	pm.mu.RLock()
+	defer pm.mu.RUnlock()
+	var errors []error
+	for _, plugin := range pm.plugins {
+		if err := plugin.Close(); err != nil {
+			errors = append(errors, fmt.Errorf("error closing plugin '%s': %w", plugin.Name, err))
+		}
+	}
+	if len(errors) > 0 {
+		return fmt.Errorf("failed to close plugins: %v", errors)
+	}
+	return nil
+}
+
+var _ agent.PluginManager = (*PluginManager)(nil)
+
+var _ tool.PluginManager = (*PluginManager)(nil)

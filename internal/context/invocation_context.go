@@ -16,6 +16,7 @@ package context
 
 import (
 	"context"
+	"reflect"
 
 	"github.com/google/uuid"
 	"google.golang.org/genai"
@@ -35,9 +36,16 @@ type InvocationContextParams struct {
 	UserContent   *genai.Content
 	RunConfig     *agent.RunConfig
 	EndInvocation bool
+	PluginManager agent.PluginManager
 }
 
 func NewInvocationContext(ctx context.Context, params InvocationContextParams) agent.InvocationContext {
+	// Sanitize the PluginManager
+	// If the underlying value is nil, force the interface to be explicitly nil
+	if params.PluginManager != nil && reflect.ValueOf(params.PluginManager).IsNil() {
+		params.PluginManager = nil
+	}
+
 	return &InvocationContext{
 		Context:      ctx,
 		params:       params,
@@ -90,4 +98,8 @@ func (c *InvocationContext) EndInvocation() {
 
 func (c *InvocationContext) Ended() bool {
 	return c.params.EndInvocation
+}
+
+func (c *InvocationContext) PluginManager() agent.PluginManager {
+	return c.params.PluginManager
 }

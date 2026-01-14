@@ -19,6 +19,7 @@ import (
 
 	"google.golang.org/genai"
 
+	"google.golang.org/adk/model"
 	"google.golang.org/adk/session"
 )
 
@@ -95,6 +96,8 @@ type InvocationContext interface {
 	EndInvocation()
 	// Ended returns whether the invocation has ended.
 	Ended() bool
+
+	PluginManager() PluginManager
 }
 
 // ReadonlyContext provides read-only access to invocation context data.
@@ -120,4 +123,17 @@ type CallbackContext interface {
 
 	Artifacts() Artifacts
 	State() session.State
+}
+
+type PluginManager interface {
+	RunOnUserMessageCallback(cctx InvocationContext, userMessage *genai.Content) (*genai.Content, error)
+	RunBeforeRunCallback(cctx InvocationContext) (*genai.Content, error)
+	RunAfterRunCallback(cctx InvocationContext)
+	RunOnEventCallback(cctx InvocationContext, event *session.Event) (*session.Event, error)
+	RunBeforeAgentCallback(cctx CallbackContext) (*genai.Content, error)
+	RunAfterAgentCallback(cctx CallbackContext) (*genai.Content, error)
+	RunBeforeModelCallback(cctx CallbackContext, llmRequest *model.LLMRequest) (*model.LLMResponse, error)
+	RunAfterModelCallback(cctx CallbackContext, llmResponse *model.LLMResponse, llmResponseError error) (*model.LLMResponse, error)
+	RunOnModelErrorCallback(ctx CallbackContext, llmRequest *model.LLMRequest, llmResponseError error) (*model.LLMResponse, error)
+	Close() error
 }
