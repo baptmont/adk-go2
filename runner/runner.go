@@ -56,9 +56,8 @@ type Config struct {
 }
 
 type PluginConfig struct {
-	Plugins        []plugin.Plugin
-	ExecutionOrder plugin.ExecutionOrder
-	CloseTimeout   time.Duration
+	Plugins      []plugin.Plugin
+	CloseTimeout time.Duration
 }
 
 // New creates a new [Runner].
@@ -77,9 +76,8 @@ func New(cfg Config) (*Runner, error) {
 	}
 
 	pluginManager, err := plugininternal.NewPluginManager(plugininternal.PluginConfig{
-		Plugins:        cfg.PluginConfig.Plugins,
-		ExecutionOrder: cfg.PluginConfig.ExecutionOrder,
-		CloseTimeout:   cfg.PluginConfig.CloseTimeout,
+		Plugins:      cfg.PluginConfig.Plugins,
+		CloseTimeout: cfg.PluginConfig.CloseTimeout,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to create plugin manager: %w", err)

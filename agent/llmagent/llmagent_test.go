@@ -375,7 +375,7 @@ func TestModelCallbacks(t *testing.T) {
 			},
 		},
 		{
-			name: "before error callback process on model error callback message",
+			name: "after error callback process on model error callback message",
 			onModelErrorCallback: []llmagent.OnModelErrorCallback{
 				func(ctx agent.CallbackContext, llmRequest *model.LLMRequest, llmError error) (*model.LLMResponse, error) {
 					return &model.LLMResponse{
@@ -396,7 +396,7 @@ func TestModelCallbacks(t *testing.T) {
 			},
 		},
 		{
-			name: "before error callback does not process on model error callback error",
+			name: "after error callback does not process on model error callback error",
 			onModelErrorCallback: []llmagent.OnModelErrorCallback{
 				func(ctx agent.CallbackContext, llmRequest *model.LLMRequest, llmError error) (*model.LLMResponse, error) {
 					return nil, fmt.Errorf("error from on_model_error_callback: %w", http.ErrNoCookie)

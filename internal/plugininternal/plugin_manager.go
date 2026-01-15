@@ -16,7 +16,6 @@ package plugininternal
 
 import (
 	"fmt"
-	"sync"
 	"time"
 
 	"google.golang.org/genai"
@@ -29,30 +28,26 @@ import (
 )
 
 type PluginConfig struct {
-	Plugins        []plugin.Plugin
-	ExecutionOrder plugin.ExecutionOrder
-	CloseTimeout   time.Duration
+	Plugins      []plugin.Plugin
+	CloseTimeout time.Duration
 }
 
 // PluginManager manages the registration and execution of plugins.
 type PluginManager struct {
-	plugins        []plugin.Plugin
-	executionOrder plugin.ExecutionOrder
-	closeTimeout   time.Duration
-	mu             sync.RWMutex
+	plugins      []plugin.Plugin
+	closeTimeout time.Duration
 }
 
 // NewPluginManager creates a new PluginManager.
 func NewPluginManager(cfg PluginConfig) (*PluginManager, error) {
 	pm := &PluginManager{
-		executionOrder: cfg.ExecutionOrder,
-		closeTimeout:   cfg.CloseTimeout,
-		plugins:        make([]plugin.Plugin, 0, len(cfg.Plugins)),
+		closeTimeout: cfg.CloseTimeout,
+		plugins:      make([]plugin.Plugin, 0, len(cfg.Plugins)),
 	}
 
 	// Register plugins defined in the config
 	for _, p := range cfg.Plugins {
-		err := pm.RegisterPlugin(p)
+		err := pm.registerPlugin(p)
 		if err != nil {
 			return nil, err
 		}
@@ -62,10 +57,7 @@ func NewPluginManager(cfg PluginConfig) (*PluginManager, error) {
 }
 
 // RegisterPlugin adds a new plugin to the manager.
-func (pm *PluginManager) RegisterPlugin(plugin plugin.Plugin) error {
-	pm.mu.Lock()
-	defer pm.mu.Unlock()
-
+func (pm *PluginManager) registerPlugin(plugin plugin.Plugin) error {
 	for _, p := range pm.plugins {
 		if p.Name == plugin.Name {
 			return fmt.Errorf("plugin with name '%s' already registered", plugin.Name)
@@ -77,8 +69,6 @@ func (pm *PluginManager) RegisterPlugin(plugin plugin.Plugin) error {
 
 // RunOnUserMessageCallback runs the OnUserMessageCallback for all plugins.
 func (pm *PluginManager) RunOnUserMessageCallback(cctx agent.InvocationContext, userMessage *genai.Content) (*genai.Content, error) {
-	pm.mu.RLock()
-	defer pm.mu.RUnlock()
 	for _, plugin := range pm.plugins {
 		if plugin.OnUserMessageCallback != nil {
 			newContent, err := plugin.OnUserMessageCallback(cctx, userMessage)
@@ -95,8 +85,6 @@ func (pm *PluginManager) RunOnUserMessageCallback(cctx agent.InvocationContext, 
 
 // RunBeforeRunCallback runs the BeforeRunCallback for all plugins.
 func (pm *PluginManager) RunBeforeRunCallback(cctx agent.InvocationContext) (*genai.Content, error) {
-	pm.mu.RLock()
-	defer pm.mu.RUnlock()
 	for _, plugin := range pm.plugins {
 		if plugin.BeforeRunCallback != nil {
 			newContent, err := plugin.BeforeRunCallback(cctx)
@@ -113,9 +101,8 @@ func (pm *PluginManager) RunBeforeRunCallback(cctx agent.InvocationContext) (*ge
 
 // RunAfterRunCallback runs the AfterRunCallback for all plugins.
 func (pm *PluginManager) RunAfterRunCallback(cctx agent.InvocationContext) {
-	pm.mu.RLock()
-	defer pm.mu.RUnlock()
-	for _, plugin := range pm.plugins {
+	for i := len(pm.plugins) - 1; i >= 0; i-- {
+		plugin := pm.plugins[i]
 		if plugin.AfterRunCallback != nil {
 			plugin.AfterRunCallback(cctx)
 		}
@@ -124,8 +111,6 @@ func (pm *PluginManager) RunAfterRunCallback(cctx agent.InvocationContext) {
 
 // RunOnEventCallback runs the OnEventCallback for all plugins.
 func (pm *PluginManager) RunOnEventCallback(cctx agent.InvocationContext, event *session.Event) (*session.Event, error) {
-	pm.mu.RLock()
-	defer pm.mu.RUnlock()
 	for _, plugin := range pm.plugins {
 		if plugin.OnEventCallback != nil {
 			// TODO: Replace 'any' with the actual Event type
@@ -143,8 +128,6 @@ func (pm *PluginManager) RunOnEventCallback(cctx agent.InvocationContext, event 
 
 // RunBeforeAgentCallback runs the BeforeAgentCallback for all plugins.
 func (pm *PluginManager) RunBeforeAgentCallback(cctx agent.CallbackContext) (*genai.Content, error) {
-	pm.mu.RLock()
-	defer pm.mu.RUnlock()
 	for _, plugin := range pm.plugins {
 		if plugin.BeforeAgentCallback != nil {
 			newContent, err := plugin.BeforeAgentCallback(cctx)
@@ -161,9 +144,8 @@ func (pm *PluginManager) RunBeforeAgentCallback(cctx agent.CallbackContext) (*ge
 
 // RunAfterAgentCallback runs the AfterAgentCallback for all plugins.
 func (pm *PluginManager) RunAfterAgentCallback(cctx agent.CallbackContext) (*genai.Content, error) {
-	pm.mu.RLock()
-	defer pm.mu.RUnlock()
-	for _, plugin := range pm.plugins {
+	for i := len(pm.plugins) - 1; i >= 0; i-- {
+		plugin := pm.plugins[i]
 		if plugin.AfterAgentCallback != nil {
 			newContent, err := plugin.AfterAgentCallback(cctx)
 			if err != nil {
@@ -179,8 +161,6 @@ func (pm *PluginManager) RunAfterAgentCallback(cctx agent.CallbackContext) (*gen
 
 // RunBeforeToolCallback runs the BeforeToolCallback for all plugins.
 func (pm *PluginManager) RunBeforeToolCallback(ctx tool.Context, tool tool.Tool, args map[string]any) (map[string]any, error) {
-	pm.mu.RLock()
-	defer pm.mu.RUnlock()
 	for _, plugin := range pm.plugins {
 		if plugin.BeforeToolCallback != nil {
 			newArgs, err := plugin.BeforeToolCallback(ctx, tool, args)
@@ -197,9 +177,8 @@ func (pm *PluginManager) RunBeforeToolCallback(ctx tool.Context, tool tool.Tool,
 
 // RunAfterToolCallback runs the AfterToolCallback for all plugins.
 func (pm *PluginManager) RunAfterToolCallback(ctx tool.Context, tool tool.Tool, args, result map[string]any, err error) (map[string]any, error) {
-	pm.mu.RLock()
-	defer pm.mu.RUnlock()
-	for _, plugin := range pm.plugins {
+	for i := len(pm.plugins) - 1; i >= 0; i-- {
+		plugin := pm.plugins[i]
 		if plugin.AfterToolCallback != nil {
 			newResult, err := plugin.AfterToolCallback(ctx, tool, args, result, err)
 			if err != nil {
@@ -215,8 +194,6 @@ func (pm *PluginManager) RunAfterToolCallback(ctx tool.Context, tool tool.Tool, 
 
 // RunOnToolErrorCallback runs the OnToolErrorCallback for all plugins.
 func (pm *PluginManager) RunOnToolErrorCallback(ctx tool.Context, tool tool.Tool, args map[string]any, err error) (map[string]any, error) {
-	pm.mu.RLock()
-	defer pm.mu.RUnlock()
 	for _, plugin := range pm.plugins {
 		if plugin.OnToolErrorCallback != nil {
 			newResult, err := plugin.OnToolErrorCallback(ctx, tool, args, err)
@@ -233,8 +210,6 @@ func (pm *PluginManager) RunOnToolErrorCallback(ctx tool.Context, tool tool.Tool
 
 // RunBeforeModelCallback runs the BeforeModelCallback for all plugins.
 func (pm *PluginManager) RunBeforeModelCallback(cctx agent.CallbackContext, llmRequest *model.LLMRequest) (*model.LLMResponse, error) {
-	pm.mu.RLock()
-	defer pm.mu.RUnlock()
 	for _, plugin := range pm.plugins {
 		if plugin.BeforeModelCallback != nil {
 			newResponse, err := plugin.BeforeModelCallback(cctx, llmRequest)
@@ -251,9 +226,8 @@ func (pm *PluginManager) RunBeforeModelCallback(cctx agent.CallbackContext, llmR
 
 // RunAfterModelCallback runs the AfterModelCallback for all plugins.
 func (pm *PluginManager) RunAfterModelCallback(cctx agent.CallbackContext, llmResponse *model.LLMResponse, llmResponseError error) (*model.LLMResponse, error) {
-	pm.mu.RLock()
-	defer pm.mu.RUnlock()
-	for _, plugin := range pm.plugins {
+	for i := len(pm.plugins) - 1; i >= 0; i-- {
+		plugin := pm.plugins[i]
 		if plugin.AfterModelCallback != nil {
 			newResponse, err := plugin.AfterModelCallback(cctx, llmResponse, llmResponseError)
 			if err != nil {
@@ -269,8 +243,6 @@ func (pm *PluginManager) RunAfterModelCallback(cctx agent.CallbackContext, llmRe
 
 // RunOnModelErrorCallback runs the OnModelErrorCallback for all plugins.
 func (pm *PluginManager) RunOnModelErrorCallback(cctx agent.CallbackContext, llmRequest *model.LLMRequest, llmResponseError error) (*model.LLMResponse, error) {
-	pm.mu.RLock()
-	defer pm.mu.RUnlock()
 	for _, plugin := range pm.plugins {
 		if plugin.OnModelErrorCallback != nil {
 			newResponse, err := plugin.OnModelErrorCallback(cctx, llmRequest, llmResponseError)
@@ -287,8 +259,6 @@ func (pm *PluginManager) RunOnModelErrorCallback(cctx agent.CallbackContext, llm
 
 // Close calls the CloseFunc on all registered plugins.
 func (pm *PluginManager) Close() error {
-	pm.mu.RLock()
-	defer pm.mu.RUnlock()
 	var errors []error
 	for _, plugin := range pm.plugins {
 		if err := plugin.Close(); err != nil {

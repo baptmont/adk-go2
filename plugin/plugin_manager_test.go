@@ -116,35 +116,37 @@ func TestCallTool(t *testing.T) {
 			want:           map[string]any{"result": "modified"},
 		},
 		{
-			name: "after callback handles error",
+			name: "after callback handles error and are run in symmetrical order",
 			tool: func(ctx tool.Context, args map[string]any) (map[string]any, error) {
 				return nil, errors.New("tool error")
 			},
 			afterToolCallbacks: []llmagent.AfterToolCallback{
+				func(ctx tool.Context, tool tool.Tool, args, result map[string]any, err error) (map[string]any, error) {
+					t.Errorf("unexpected call to after tool callback")
+					return map[string]any{"result": "unexpected output"}, nil
+				},
 				func(ctx tool.Context, tool tool.Tool, args, result map[string]any, err error) (map[string]any, error) {
 					if err != nil {
 						return map[string]any{"result": "error handled"}, nil
 					}
 					return nil, nil
 				},
-				func(ctx tool.Context, tool tool.Tool, args, result map[string]any, err error) (map[string]any, error) {
-					return map[string]any{"result": "unexpected output"}, nil
-				},
 			},
 			dontRunAfter: true,
 			want:         map[string]any{"result": "error handled"},
 		},
 		{
-			name: "after callback returns error",
+			name: "after callback returns error and are run in symmetrical order",
 			tool: func(ctx tool.Context, args map[string]any) (map[string]any, error) {
 				return map[string]any{"result": "success"}, nil
 			},
 			afterToolCallbacks: []llmagent.AfterToolCallback{
 				func(ctx tool.Context, tool tool.Tool, args, result map[string]any, err error) (map[string]any, error) {
-					return nil, errors.New("after callback error")
+					t.Errorf("unexpected call to after tool callback")
+					return nil, errors.New("unexpected error")
 				},
 				func(ctx tool.Context, tool tool.Tool, args, result map[string]any, err error) (map[string]any, error) {
-					return nil, errors.New("unexpected error")
+					return nil, errors.New("after callback error")
 				},
 			},
 			dontRunOnError: true,
@@ -562,16 +564,16 @@ func TestModelCallbacks(t *testing.T) {
 			},
 		},
 		{
-			name: "after model callback returns new LLMResponse",
+			name: "after model callback returns new LLMResponse and are run in symmetrical order",
 			afterModelCallbacks: []llmagent.AfterModelCallback{
 				func(ctx agent.CallbackContext, llmResponse *model.LLMResponse, llmResponseError error) (*model.LLMResponse, error) {
 					return &model.LLMResponse{
-						Content: genai.NewContentFromText("hello from after_model_callback", genai.RoleModel),
+						Content: genai.NewContentFromText("unexpected text", genai.RoleModel),
 					}, nil
 				},
 				func(ctx agent.CallbackContext, llmResponse *model.LLMResponse, llmResponseError error) (*model.LLMResponse, error) {
 					return &model.LLMResponse{
-						Content: genai.NewContentFromText("unexpected text", genai.RoleModel),
+						Content: genai.NewContentFromText("hello from after_model_callback", genai.RoleModel),
 					}, nil
 				},
 			},
@@ -585,13 +587,13 @@ func TestModelCallbacks(t *testing.T) {
 			},
 		},
 		{
-			name: "after model callback returns error",
+			name: "after model callback returns error and are run in symmetrical order",
 			afterModelCallbacks: []llmagent.AfterModelCallback{
 				func(ctx agent.CallbackContext, llmResponse *model.LLMResponse, llmResponseError error) (*model.LLMResponse, error) {
-					return nil, fmt.Errorf("error from after_model_callback: %w", http.ErrNoCookie)
+					return nil, fmt.Errorf("error from after_model_callback: %w", http.ErrHijacked)
 				},
 				func(ctx agent.CallbackContext, llmResponse *model.LLMResponse, llmResponseError error) (*model.LLMResponse, error) {
-					return nil, fmt.Errorf("error from after_model_callback: %w", http.ErrHijacked)
+					return nil, fmt.Errorf("error from after_model_callback: %w", http.ErrNoCookie)
 				},
 			},
 			llmResponses: []*genai.Content{

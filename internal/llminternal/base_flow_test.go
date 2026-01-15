@@ -279,6 +279,7 @@ func TestCallTool(t *testing.T) {
 			onToolErrorCallbacks: []OnToolErrorCallback{
 				func(ctx tool.Context, tool tool.Tool, args map[string]any, err error) (map[string]any, error) {
 					if err == nil || err.Error() != "error_from_before" {
+						t.Error("unexpected error in on tool error callback")
 						return nil, errors.New("unexpected error in on tool error callback")
 					}
 					return map[string]any{"result": "error_handled_in_on_tool_error_callback"}, nil
@@ -303,6 +304,7 @@ func TestCallTool(t *testing.T) {
 			onToolErrorCallbacks: []OnToolErrorCallback{
 				func(ctx tool.Context, tool tool.Tool, args map[string]any, err error) (map[string]any, error) {
 					if err == nil || err.Error() != "error_from_before" {
+						t.Error("unexpected error in on tool error callback")
 						return nil, errors.New("unexpected error in on tool error callback")
 					}
 					return map[string]any{"result": "error_handled_in_on_tool_error_callback"}, nil
@@ -335,6 +337,7 @@ func TestCallTool(t *testing.T) {
 			onToolErrorCallbacks: []OnToolErrorCallback{
 				func(ctx tool.Context, tool tool.Tool, args map[string]any, err error) (map[string]any, error) {
 					if err == nil || err.Error() != "error_from_before" {
+						t.Error("unexpected error in on tool error callback")
 						return nil, errors.New("unexpected error in on tool error callback")
 					}
 					return nil, errors.New("error_from_on_tool_error")
@@ -367,6 +370,7 @@ func TestCallTool(t *testing.T) {
 			onToolErrorCallbacks: []OnToolErrorCallback{
 				func(ctx tool.Context, tool tool.Tool, args map[string]any, err error) (map[string]any, error) {
 					if err == nil || err.Error() != "error_from_before" {
+						t.Error("unexpected error in on tool error callback")
 						return nil, errors.New("unexpected error in on tool error callback")
 					}
 					return nil, errors.New("error_from_on_tool_error")
