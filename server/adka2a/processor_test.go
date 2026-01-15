@@ -31,6 +31,12 @@ func modelResponseFromParts(parts ...*genai.Part) model.LLMResponse {
 	return model.LLMResponse{Content: &genai.Content{Role: genai.RoleModel, Parts: parts}}
 }
 
+func modelPartialResponseFromParts(parts ...*genai.Part) model.LLMResponse {
+	resp := modelResponseFromParts(parts...)
+	resp.Partial = true
+	return resp
+}
+
 func newArtifactLastChunkEvent(task *a2a.Task) *a2a.TaskArtifactUpdateEvent {
 	ev := a2a.NewArtifactUpdateEvent(task, a2a.NewArtifactID())
 	ev.LastChunk = true
@@ -296,6 +302,45 @@ func TestEventProcessor_Process(t *testing.T) {
 				),
 			},
 		},
+		{
+			name: "partial events parts marked",
+			events: []*session.Event{
+				{
+					LLMResponse: modelPartialResponseFromParts(
+						genai.NewPartFromText("The answer is"),
+						genai.NewPartFromExecutableCode("get_the_answer()", genai.LanguagePython)),
+				},
+				{LLMResponse: modelPartialResponseFromParts(
+					genai.NewPartFromCodeExecutionResult(genai.OutcomeOK, "42"),
+					genai.NewPartFromText("42"),
+				)},
+			},
+			processed: []*a2a.TaskArtifactUpdateEvent{
+				a2a.NewArtifactEvent(task,
+					a2a.TextPart{Text: "The answer is", Metadata: map[string]any{ToA2AMetaKey("partial"): true}},
+					a2a.DataPart{
+						Data: map[string]any{"code": "get_the_answer()", "language": string(genai.LanguagePython)},
+						Metadata: map[string]any{
+							a2aDataPartMetaTypeKey:  a2aDataPartTypeCodeExecutableCode,
+							ToA2AMetaKey("partial"): true,
+						},
+					}),
+				a2a.NewArtifactUpdateEvent(task, artifactIDPlaceholder,
+					a2a.DataPart{
+						Data: map[string]any{"outcome": string(genai.OutcomeOK), "output": "42"},
+						Metadata: map[string]any{
+							a2aDataPartMetaTypeKey:  a2aDataPartTypeCodeExecResult,
+							ToA2AMetaKey("partial"): true,
+						},
+					},
+					a2a.TextPart{Text: "42", Metadata: map[string]any{ToA2AMetaKey("partial"): true}},
+				),
+			},
+			terminal: []a2a.Event{
+				newArtifactLastChunkEvent(task),
+				newFinalStatusUpdate(task, a2a.TaskStateCompleted, nil),
+			},
+		},
 	}
 
 	for _, tc := range testCases {
@@ -323,7 +368,7 @@ func TestEventProcessor_Process(t *testing.T) {
 				t.Fatalf("processor.process() wrong result (+got,-want)\ngot = %v\nwant = %v\ndiff = %s", gotEvents, tc.events, diff)
 			}
 
-			gotTerminal := processor.makeTerminalEvents()
+			gotTerminal := makeTerminalEvents(processor)
 			if diff := cmp.Diff(tc.terminal, gotTerminal, ignoreFields...); diff != "" {
 				t.Fatalf("processor.makeTerminalEvents() wrong result (+got,-want)\ngot = %v\nwant = %v\ndiff = %s", gotTerminal, tc.terminal, diff)
 			}
@@ -382,7 +427,7 @@ func TestEventProcessor_ArtifactUpdates(t *testing.T) {
 		}
 	}
 
-	terminal := processor.makeTerminalEvents()
+	terminal := makeTerminalEvents(processor)
 	finalUpdate, ok := terminal[0].(*a2a.TaskArtifactUpdateEvent)
 	if len(terminal) != 2 || !ok {
 		t.Fatalf("processor.makeTerminalEvents() = %v, want [finalArtifactChunk, finalStatusUpdate]", terminal)
@@ -390,4 +435,13 @@ func TestEventProcessor_ArtifactUpdates(t *testing.T) {
 	if !(finalUpdate.Append && finalUpdate.LastChunk) {
 		t.Fatalf("finalArtifactUpdate = %+v, want {Append=true, LastChunk=true}", finalUpdate)
 	}
+}
+
+func makeTerminalEvents(processor *eventProcessor) []a2a.Event {
+	result := make([]a2a.Event, 0, 2)
+	if finalUpdate, ok := processor.makeFinalArtifactUpdate(); ok {
+		result = append(result, finalUpdate)
+	}
+	result = append(result, processor.makeFinalStatusUpdate())
+	return result
 }

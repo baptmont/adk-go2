@@ -43,6 +43,21 @@ func basicRequestProcessor(ctx agent.InvocationContext, req *model.LLMRequest, f
 			req.Config.ResponseSchema = llmAgent.internal().OutputSchema
 			req.Config.ResponseMIMEType = "application/json"
 		}
+
+		state := llmAgent.internal()
+
+		req.Config = clone(state.GenerateContentConfig)
+		if req.Config == nil {
+			req.Config = &genai.GenerateContentConfig{}
+		}
+
+		// Set OutputSchema directly if no tools are present or native combo support exists.
+		// Otherwise, OutputSchemaRequestProcessor will be used to provide a tool-based workaround.
+		if state.OutputSchema != nil && !needOutputSchemaProcessor(state) {
+			req.Config.ResponseSchema = state.OutputSchema
+			req.Config.ResponseMIMEType = "application/json"
+		}
+
 		// TODO: missing features
 		//  populate LLMRequest LiveConnectConfig setting
 	}

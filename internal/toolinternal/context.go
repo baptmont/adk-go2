@@ -101,6 +101,9 @@ func (c *toolContext) AgentName() string {
 }
 
 func (c *toolContext) SearchMemory(ctx context.Context, query string) (*memory.SearchResponse, error) {
+	if c.invocationContext.Memory() == nil {
+		return nil, fmt.Errorf("memory service is not set")
+	}
 	return c.invocationContext.Memory().Search(ctx, query)
 }
 
