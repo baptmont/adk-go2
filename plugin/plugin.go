@@ -49,21 +49,20 @@ type Config struct {
 
 func New(cfg Config) (*Plugin, error) {
 	p := &Plugin{
-		Name:                  cfg.Name,
-		OnUserMessageCallback: cfg.OnUserMessageCallback,
-		OnEventCallback:       cfg.OnEventCallback,
-		BeforeRunCallback:     cfg.BeforeRunCallback,
-		AfterRunCallback:      cfg.AfterRunCallback,
-		BeforeAgentCallback:   cfg.BeforeAgentCallback,
-		AfterAgentCallback:    cfg.AfterAgentCallback,
-		BeforeModelCallback:   cfg.BeforeModelCallback,
-		AfterModelCallback:    cfg.AfterModelCallback,
-		OnModelErrorCallback:  cfg.OnModelErrorCallback,
-		BeforeToolCallback:    cfg.BeforeToolCallback,
-		AfterToolCallback:     cfg.AfterToolCallback,
-		OnToolErrorCallback:   cfg.OnToolErrorCallback,
-		// Map the exported config field to the unexported plugin field
-		closeFunc: cfg.CloseFunc,
+		name:                  cfg.Name,
+		onUserMessageCallback: cfg.OnUserMessageCallback,
+		onEventCallback:       cfg.OnEventCallback,
+		beforeRunCallback:     cfg.BeforeRunCallback,
+		afterRunCallback:      cfg.AfterRunCallback,
+		beforeAgentCallback:   cfg.BeforeAgentCallback,
+		afterAgentCallback:    cfg.AfterAgentCallback,
+		beforeModelCallback:   cfg.BeforeModelCallback,
+		afterModelCallback:    cfg.AfterModelCallback,
+		onModelErrorCallback:  cfg.OnModelErrorCallback,
+		beforeToolCallback:    cfg.BeforeToolCallback,
+		afterToolCallback:     cfg.AfterToolCallback,
+		onToolErrorCallback:   cfg.OnToolErrorCallback,
+		closeFunc:             cfg.CloseFunc,
 	}
 
 	// Ensure closeFunc is never nil so p.Close() doesn't panic
@@ -77,30 +76,86 @@ func New(cfg Config) (*Plugin, error) {
 }
 
 type Plugin struct {
-	Name                  string
-	OnUserMessageCallback OnUserMessageCallback
+	name string
 
-	OnEventCallback OnEventCallback
+	onUserMessageCallback OnUserMessageCallback
+	onEventCallback       OnEventCallback
 
-	BeforeRunCallback BeforeRunCallback
-	AfterRunCallback  AfterRunCallback
+	beforeRunCallback BeforeRunCallback
+	afterRunCallback  AfterRunCallback
 
-	BeforeAgentCallback agent.BeforeAgentCallback
-	AfterAgentCallback  agent.AfterAgentCallback
+	beforeAgentCallback agent.BeforeAgentCallback
+	afterAgentCallback  agent.AfterAgentCallback
 
-	BeforeModelCallback  llmagent.BeforeModelCallback
-	AfterModelCallback   llmagent.AfterModelCallback
-	OnModelErrorCallback llmagent.OnModelErrorCallback
+	beforeModelCallback  llmagent.BeforeModelCallback
+	afterModelCallback   llmagent.AfterModelCallback
+	onModelErrorCallback llmagent.OnModelErrorCallback
 
-	BeforeToolCallback  llmagent.BeforeToolCallback
-	AfterToolCallback   llmagent.AfterToolCallback
-	OnToolErrorCallback llmagent.OnToolErrorCallback
+	beforeToolCallback  llmagent.BeforeToolCallback
+	afterToolCallback   llmagent.AfterToolCallback
+	onToolErrorCallback llmagent.OnToolErrorCallback
 
 	closeFunc func() error
 }
 
+// Name returns the name of the plugin.
+func (p *Plugin) Name() string {
+	return p.name
+}
+
+// Close safely calls the internal close function.
 func (p *Plugin) Close() error {
 	return p.closeFunc()
+}
+
+// --- Accessors ---
+
+func (p *Plugin) OnUserMessageCallback() OnUserMessageCallback {
+	return p.onUserMessageCallback
+}
+
+func (p *Plugin) OnEventCallback() OnEventCallback {
+	return p.onEventCallback
+}
+
+func (p *Plugin) BeforeRunCallback() BeforeRunCallback {
+	return p.beforeRunCallback
+}
+
+func (p *Plugin) AfterRunCallback() AfterRunCallback {
+	return p.afterRunCallback
+}
+
+func (p *Plugin) BeforeAgentCallback() agent.BeforeAgentCallback {
+	return p.beforeAgentCallback
+}
+
+func (p *Plugin) AfterAgentCallback() agent.AfterAgentCallback {
+	return p.afterAgentCallback
+}
+
+func (p *Plugin) BeforeModelCallback() llmagent.BeforeModelCallback {
+	return p.beforeModelCallback
+}
+
+func (p *Plugin) AfterModelCallback() llmagent.AfterModelCallback {
+	return p.afterModelCallback
+}
+
+func (p *Plugin) OnModelErrorCallback() llmagent.OnModelErrorCallback {
+	return p.onModelErrorCallback
+}
+
+func (p *Plugin) BeforeToolCallback() llmagent.BeforeToolCallback {
+	return p.beforeToolCallback
+}
+
+func (p *Plugin) AfterToolCallback() llmagent.AfterToolCallback {
+	return p.afterToolCallback
+}
+
+func (p *Plugin) OnToolErrorCallback() llmagent.OnToolErrorCallback {
+	return p.onToolErrorCallback
 }
 
 type OnUserMessageCallback func(agent.InvocationContext, *genai.Content) (*genai.Content, error)

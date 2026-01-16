@@ -539,7 +539,7 @@ func (f *Flow) runOnToolErrorCallbacks(toolCtx tool.Context, tool tool.Tool, fAr
 	pluginManager := pluginManagerFromContext(toolCtx)
 	if pluginManager != nil {
 		result, err := pluginManager.RunOnToolErrorCallback(toolCtx, tool, fArgs, err)
-		if result != nil && err != nil {
+		if result != nil || err != nil {
 			return result, err
 		}
 	}

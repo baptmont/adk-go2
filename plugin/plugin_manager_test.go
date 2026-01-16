@@ -35,16 +35,16 @@ import (
 )
 
 type testCase struct {
-	name                 string
-	tool                 func(tool.Context, map[string]any) (map[string]any, error)
-	args                 map[string]any
-	beforeToolCallbacks  []llmagent.BeforeToolCallback
-	afterToolCallbacks   []llmagent.AfterToolCallback
-	onToolErrorCallbacks []llmagent.OnToolErrorCallback
-	want                 map[string]any
-	dontRunBefore        bool
-	dontRunAfter         bool
-	dontRunOnError       bool
+	name                            string
+	tool                            func(tool.Context, map[string]any) (map[string]any, error)
+	args                            map[string]any
+	beforeToolCallbacks             []llmagent.BeforeToolCallback
+	afterToolCallbacks              []llmagent.AfterToolCallback
+	onToolErrorCallbacks            []llmagent.OnToolErrorCallback
+	want                            map[string]any
+	dontRunBeforeCanonicalCallback  bool
+	dontRunAfterCanonicalCallback   bool
+	dontRunOnErrorCanonicalCallback bool
 }
 
 func TestCallTool(t *testing.T) {
@@ -54,9 +54,9 @@ func TestCallTool(t *testing.T) {
 			tool: func(ctx tool.Context, args map[string]any) (map[string]any, error) {
 				return map[string]any{"result": "success"}, nil
 			},
-			args:           map[string]any{"key": "value"},
-			dontRunOnError: true,
-			want:           map[string]any{"result": "success"},
+			args:                            map[string]any{"key": "value"},
+			dontRunOnErrorCanonicalCallback: true,
+			want:                            map[string]any{"result": "success"},
 		},
 		{
 			name: "tool error",
@@ -80,9 +80,9 @@ func TestCallTool(t *testing.T) {
 					return map[string]any{"result": "2nd callback should not be called"}, nil
 				},
 			},
-			dontRunOnError: true,
-			dontRunBefore:  true,
-			want:           map[string]any{"result": "intercepted"},
+			dontRunOnErrorCanonicalCallback: true,
+			dontRunBeforeCanonicalCallback:  true,
+			want:                            map[string]any{"result": "intercepted"},
 		},
 		{
 			name: "before callback returns error",
@@ -98,8 +98,8 @@ func TestCallTool(t *testing.T) {
 					return nil, errors.New("unexpected error")
 				},
 			},
-			dontRunBefore: true,
-			want:          map[string]any{"error": "before callback error"},
+			dontRunBeforeCanonicalCallback: true,
+			want:                           map[string]any{"error": "before callback error"},
 		},
 		{
 			name: "after callback modifies result",
@@ -111,9 +111,9 @@ func TestCallTool(t *testing.T) {
 					return map[string]any{"result": "modified"}, nil
 				},
 			},
-			dontRunAfter:   true,
-			dontRunOnError: true,
-			want:           map[string]any{"result": "modified"},
+			dontRunAfterCanonicalCallback:   true,
+			dontRunOnErrorCanonicalCallback: true,
+			want:                            map[string]any{"result": "modified"},
 		},
 		{
 			name: "after callback handles error and are run in symmetrical order",
@@ -132,8 +132,8 @@ func TestCallTool(t *testing.T) {
 					return nil, nil
 				},
 			},
-			dontRunAfter: true,
-			want:         map[string]any{"result": "error handled"},
+			dontRunAfterCanonicalCallback: true,
+			want:                          map[string]any{"result": "error handled"},
 		},
 		{
 			name: "after callback returns error and are run in symmetrical order",
@@ -149,9 +149,9 @@ func TestCallTool(t *testing.T) {
 					return nil, errors.New("after callback error")
 				},
 			},
-			dontRunOnError: true,
-			dontRunAfter:   true,
-			want:           map[string]any{"error": "after callback error"},
+			dontRunOnErrorCanonicalCallback: true,
+			dontRunAfterCanonicalCallback:   true,
+			want:                            map[string]any{"error": "after callback error"},
 		},
 		{
 			name: "no-op callbacks return func results",
@@ -168,8 +168,8 @@ func TestCallTool(t *testing.T) {
 					return nil, nil
 				},
 			},
-			dontRunOnError: true,
-			want:           map[string]any{"result": "success"},
+			dontRunOnErrorCanonicalCallback: true,
+			want:                            map[string]any{"result": "success"},
 		},
 		{
 			name: "before callback result passed to after callback",
@@ -190,10 +190,10 @@ func TestCallTool(t *testing.T) {
 					return map[string]any{"result": "from_after"}, nil
 				},
 			},
-			dontRunOnError: true,
-			dontRunBefore:  true,
-			dontRunAfter:   true,
-			want:           map[string]any{"result": "from_after"},
+			dontRunOnErrorCanonicalCallback: true,
+			dontRunBeforeCanonicalCallback:  true,
+			dontRunAfterCanonicalCallback:   true,
+			want:                            map[string]any{"result": "from_after"},
 		},
 		{
 			name: "before callback error passed to after callback",
@@ -214,9 +214,9 @@ func TestCallTool(t *testing.T) {
 					return map[string]any{"result": "error_handled_in_after"}, nil
 				},
 			},
-			dontRunBefore: true,
-			dontRunAfter:  true,
-			want:          map[string]any{"result": "error_handled_in_after"},
+			dontRunBeforeCanonicalCallback: true,
+			dontRunAfterCanonicalCallback:  true,
+			want:                           map[string]any{"result": "error_handled_in_after"},
 		},
 		{
 			name: "before callback error passed to on tool error callback",
@@ -237,9 +237,9 @@ func TestCallTool(t *testing.T) {
 					return map[string]any{"result": "error_handled_in_on_tool_error_callback"}, nil
 				},
 			},
-			dontRunBefore:  true,
-			dontRunOnError: true,
-			want:           map[string]any{"result": "error_handled_in_on_tool_error_callback"},
+			dontRunBeforeCanonicalCallback:  true,
+			dontRunOnErrorCanonicalCallback: true,
+			want:                            map[string]any{"result": "error_handled_in_on_tool_error_callback"},
 		},
 		{
 			name: "before callback error passed to on tool error callback and after tool called",
@@ -268,10 +268,10 @@ func TestCallTool(t *testing.T) {
 					return map[string]any{"result": "from_after"}, nil
 				},
 			},
-			dontRunAfter:   true,
-			dontRunBefore:  true,
-			dontRunOnError: true,
-			want:           map[string]any{"result": "from_after"},
+			dontRunAfterCanonicalCallback:   true,
+			dontRunBeforeCanonicalCallback:  true,
+			dontRunOnErrorCanonicalCallback: true,
+			want:                            map[string]any{"result": "from_after"},
 		},
 		{
 			name: "before callback error passed to on tool error callback and passed to after tool called",
@@ -300,10 +300,10 @@ func TestCallTool(t *testing.T) {
 					return nil, errors.New("error_from_after_tool")
 				},
 			},
-			dontRunAfter:   true,
-			dontRunOnError: true,
-			dontRunBefore:  true,
-			want:           map[string]any{"error": "error_from_after_tool"},
+			dontRunAfterCanonicalCallback:   true,
+			dontRunOnErrorCanonicalCallback: true,
+			dontRunBeforeCanonicalCallback:  true,
+			want:                            map[string]any{"error": "error_from_after_tool"},
 		},
 		{
 			name: "before callback error passed to on tool error callback and passed to after tool called and handled",
@@ -332,10 +332,10 @@ func TestCallTool(t *testing.T) {
 					return map[string]any{"result": "error_handled_in_after_tool_callback"}, nil
 				},
 			},
-			dontRunAfter:   true,
-			dontRunBefore:  true,
-			dontRunOnError: true,
-			want:           map[string]any{"result": "error_handled_in_after_tool_callback"},
+			dontRunAfterCanonicalCallback:   true,
+			dontRunBeforeCanonicalCallback:  true,
+			dontRunOnErrorCanonicalCallback: true,
+			want:                            map[string]any{"result": "error_handled_in_after_tool_callback"},
 		},
 	}
 	for _, tc := range testCases {
@@ -388,7 +388,7 @@ func TestCallTool(t *testing.T) {
 			onToolErrorCallbacks := []llmagent.OnToolErrorCallback{
 				func(ctx tool.Context, tool tool.Tool, args map[string]any, err error) (map[string]any, error) {
 					onToolErrorCallbacksCalled = true
-					if tc.dontRunOnError {
+					if tc.dontRunOnErrorCanonicalCallback {
 						t.Error("on tool error should not be called")
 					}
 					return nil, nil
@@ -397,7 +397,7 @@ func TestCallTool(t *testing.T) {
 			beforeToolCallbacks := []llmagent.BeforeToolCallback{
 				func(ctx tool.Context, tool tool.Tool, args map[string]any) (map[string]any, error) {
 					beforeToolCallbacksCalled = true
-					if tc.dontRunBefore {
+					if tc.dontRunBeforeCanonicalCallback {
 						t.Error("before Tool Callback should not be called")
 					}
 					return nil, nil
@@ -406,7 +406,7 @@ func TestCallTool(t *testing.T) {
 			afterToolCallbacks := []llmagent.AfterToolCallback{
 				func(ctx tool.Context, tool tool.Tool, args, result map[string]any, err error) (map[string]any, error) {
 					afterToolCallbacksCalled = true
-					if tc.dontRunAfter {
+					if tc.dontRunAfterCanonicalCallback {
 						t.Error("after Tool Callback should not be called")
 					}
 					return nil, nil
@@ -446,14 +446,14 @@ func TestCallTool(t *testing.T) {
 				t.Errorf("callTool() mismatch (-want +got):\n%s", diff)
 			}
 
-			if onToolErrorCallbacksCalled == false && tc.dontRunOnError == false {
-				t.Error("on model error should be called")
+			if onToolErrorCallbacksCalled == false && tc.dontRunOnErrorCanonicalCallback == false {
+				t.Error("on tool error should be called")
 			}
-			if beforeToolCallbacksCalled == false && tc.dontRunBefore == false {
-				t.Error("before model should be called")
+			if beforeToolCallbacksCalled == false && tc.dontRunBeforeCanonicalCallback == false {
+				t.Error("before tool should be called")
 			}
-			if afterToolCallbacksCalled == false && tc.dontRunAfter == false {
-				t.Error("after model should be called")
+			if afterToolCallbacksCalled == false && tc.dontRunAfterCanonicalCallback == false {
+				t.Error("after tool should be called")
 			}
 		})
 	}
@@ -463,16 +463,16 @@ func TestModelCallbacks(t *testing.T) {
 	t.Parallel()
 
 	for _, tc := range []struct {
-		name                 string
-		llmResponses         []*genai.Content
-		beforeModelCallbacks []llmagent.BeforeModelCallback
-		afterModelCallbacks  []llmagent.AfterModelCallback
-		onModelErrorCallback []llmagent.OnModelErrorCallback
-		wantTexts            []string
-		wantErr              error
-		dontRunBefore        bool
-		dontRunAfter         bool
-		dontRunOnError       bool
+		name                            string
+		llmResponses                    []*genai.Content
+		beforeModelCallbacks            []llmagent.BeforeModelCallback
+		afterModelCallbacks             []llmagent.AfterModelCallback
+		onModelErrorCallback            []llmagent.OnModelErrorCallback
+		wantTexts                       []string
+		wantErr                         error
+		dontRunBeforeCanonicalCallback  bool
+		dontRunAfterCanonicalCallback   bool
+		dontRunOnErrorCanonicalCallback bool
 	}{
 		{
 			name: "before model callback doesn't modify anything",
@@ -484,7 +484,7 @@ func TestModelCallbacks(t *testing.T) {
 			llmResponses: []*genai.Content{
 				genai.NewContentFromText("hello from model", genai.RoleModel),
 			},
-			dontRunOnError: true,
+			dontRunOnErrorCanonicalCallback: true,
 			wantTexts: []string{
 				"hello from model",
 			},
@@ -502,10 +502,10 @@ func TestModelCallbacks(t *testing.T) {
 			llmResponses: []*genai.Content{
 				genai.NewContentFromText("hello from model", genai.RoleModel),
 			},
-			dontRunBefore:  true,
-			dontRunOnError: true,
-			dontRunAfter:   true,
-			wantErr:        http.ErrNoCookie,
+			dontRunBeforeCanonicalCallback:  true,
+			dontRunOnErrorCanonicalCallback: true,
+			dontRunAfterCanonicalCallback:   true,
+			wantErr:                         http.ErrNoCookie,
 		},
 		{
 			name: "before model callback returns new LLMResponse",
@@ -524,9 +524,9 @@ func TestModelCallbacks(t *testing.T) {
 			llmResponses: []*genai.Content{
 				genai.NewContentFromText("hello from model", genai.RoleModel),
 			},
-			dontRunBefore:  true,
-			dontRunOnError: true,
-			dontRunAfter:   true,
+			dontRunBeforeCanonicalCallback:  true,
+			dontRunOnErrorCanonicalCallback: true,
+			dontRunAfterCanonicalCallback:   true,
 			wantTexts: []string{
 				"hello from before_model_callback",
 			},
@@ -543,10 +543,10 @@ func TestModelCallbacks(t *testing.T) {
 			llmResponses: []*genai.Content{
 				genai.NewContentFromText("hello from model", genai.RoleModel),
 			},
-			dontRunBefore:  true,
-			dontRunOnError: true,
-			dontRunAfter:   true,
-			wantErr:        http.ErrNoCookie,
+			dontRunBeforeCanonicalCallback:  true,
+			dontRunOnErrorCanonicalCallback: true,
+			dontRunAfterCanonicalCallback:   true,
+			wantErr:                         http.ErrNoCookie,
 		},
 		{
 			name: "after model callback doesn't modify anything",
@@ -558,7 +558,7 @@ func TestModelCallbacks(t *testing.T) {
 			llmResponses: []*genai.Content{
 				genai.NewContentFromText("hello from model", genai.RoleModel),
 			},
-			dontRunOnError: true,
+			dontRunOnErrorCanonicalCallback: true,
 			wantTexts: []string{
 				"hello from model",
 			},
@@ -580,8 +580,8 @@ func TestModelCallbacks(t *testing.T) {
 			llmResponses: []*genai.Content{
 				genai.NewContentFromText("hello from model", genai.RoleModel),
 			},
-			dontRunOnError: true,
-			dontRunAfter:   true,
+			dontRunOnErrorCanonicalCallback: true,
+			dontRunAfterCanonicalCallback:   true,
 			wantTexts: []string{
 				"hello from after_model_callback",
 			},
@@ -599,9 +599,9 @@ func TestModelCallbacks(t *testing.T) {
 			llmResponses: []*genai.Content{
 				genai.NewContentFromText("hello from model", genai.RoleModel),
 			},
-			dontRunOnError: true,
-			dontRunAfter:   true,
-			wantErr:        http.ErrNoCookie,
+			dontRunOnErrorCanonicalCallback: true,
+			dontRunAfterCanonicalCallback:   true,
+			wantErr:                         http.ErrNoCookie,
 		},
 		{
 			name: "after model callback returns both new LLMResponse and error",
@@ -615,9 +615,9 @@ func TestModelCallbacks(t *testing.T) {
 			llmResponses: []*genai.Content{
 				genai.NewContentFromText("hello from model", genai.RoleModel),
 			},
-			dontRunOnError: true,
-			dontRunAfter:   true,
-			wantErr:        http.ErrNoCookie,
+			dontRunOnErrorCanonicalCallback: true,
+			dontRunAfterCanonicalCallback:   true,
+			wantErr:                         http.ErrNoCookie,
 		},
 		{
 			name: "on model error callback is not called",
@@ -631,7 +631,7 @@ func TestModelCallbacks(t *testing.T) {
 			llmResponses: []*genai.Content{
 				genai.NewContentFromText("hello from model", genai.RoleModel),
 			},
-			dontRunOnError: true,
+			dontRunOnErrorCanonicalCallback: true,
 			wantTexts: []string{
 				"hello from model",
 			},
@@ -645,8 +645,8 @@ func TestModelCallbacks(t *testing.T) {
 					}, nil
 				},
 			},
-			llmResponses:   []*genai.Content{},
-			dontRunOnError: true,
+			llmResponses:                    []*genai.Content{},
+			dontRunOnErrorCanonicalCallback: true,
 			wantTexts: []string{
 				"hello from on_model_error_callback",
 			},
@@ -665,10 +665,10 @@ func TestModelCallbacks(t *testing.T) {
 					}, fmt.Errorf("error from on_model_error_callback: %w", http.ErrHijacked)
 				},
 			},
-			llmResponses:   []*genai.Content{},
-			dontRunOnError: true,
-			dontRunAfter:   true,
-			wantErr:        http.ErrNoCookie,
+			llmResponses:                    []*genai.Content{},
+			dontRunOnErrorCanonicalCallback: true,
+			dontRunAfterCanonicalCallback:   true,
+			wantErr:                         http.ErrNoCookie,
 		},
 		{
 			name: "on model error callback returns both new LLMResponse and error",
@@ -679,13 +679,13 @@ func TestModelCallbacks(t *testing.T) {
 					}, fmt.Errorf("error from on_model_error_callback: %w", http.ErrNoCookie)
 				},
 			},
-			llmResponses:   []*genai.Content{},
-			dontRunOnError: true,
-			dontRunAfter:   true,
-			wantErr:        http.ErrNoCookie,
+			llmResponses:                    []*genai.Content{},
+			dontRunOnErrorCanonicalCallback: true,
+			dontRunAfterCanonicalCallback:   true,
+			wantErr:                         http.ErrNoCookie,
 		},
 		{
-			name: "on model error callback does not process before model callback message",
+			name: "on model error callback does not process before model callback error",
 			beforeModelCallbacks: []llmagent.BeforeModelCallback{
 				func(ctx agent.CallbackContext, llmRequest *model.LLMRequest) (*model.LLMResponse, error) {
 					return nil, fmt.Errorf("before_model_callback_error: %w", http.ErrNoCookie)
@@ -701,13 +701,13 @@ func TestModelCallbacks(t *testing.T) {
 			llmResponses: []*genai.Content{
 				genai.NewContentFromText("hello from model", genai.RoleModel),
 			},
-			dontRunBefore:  true,
-			dontRunOnError: true,
-			dontRunAfter:   true,
-			wantErr:        http.ErrNoCookie,
+			dontRunBeforeCanonicalCallback:  true,
+			dontRunOnErrorCanonicalCallback: true,
+			dontRunAfterCanonicalCallback:   true,
+			wantErr:                         http.ErrNoCookie,
 		},
 		{
-			name: "on model error callback does not process before model callback error",
+			name: "on model error callback does not process before model callback message",
 			beforeModelCallbacks: []llmagent.BeforeModelCallback{
 				func(ctx agent.CallbackContext, llmRequest *model.LLMRequest) (*model.LLMResponse, error) {
 					return &model.LLMResponse{
@@ -725,9 +725,9 @@ func TestModelCallbacks(t *testing.T) {
 			llmResponses: []*genai.Content{
 				genai.NewContentFromText("hello from model", genai.RoleModel),
 			},
-			dontRunBefore:  true,
-			dontRunOnError: true,
-			dontRunAfter:   true,
+			dontRunBeforeCanonicalCallback:  true,
+			dontRunOnErrorCanonicalCallback: true,
+			dontRunAfterCanonicalCallback:   true,
 			wantTexts: []string{
 				"hello from before_model_callback",
 			},
@@ -748,9 +748,9 @@ func TestModelCallbacks(t *testing.T) {
 					}, nil
 				},
 			},
-			llmResponses:   []*genai.Content{},
-			dontRunOnError: true,
-			dontRunAfter:   true,
+			llmResponses:                    []*genai.Content{},
+			dontRunOnErrorCanonicalCallback: true,
+			dontRunAfterCanonicalCallback:   true,
 			wantTexts: []string{
 				"hello from after_model_callback",
 			},
@@ -767,10 +767,10 @@ func TestModelCallbacks(t *testing.T) {
 					return nil, fmt.Errorf("error from after_model_callback: %w", http.ErrHijacked)
 				},
 			},
-			llmResponses:   []*genai.Content{},
-			dontRunOnError: true,
-			dontRunAfter:   true,
-			wantErr:        http.ErrNoCookie,
+			llmResponses:                    []*genai.Content{},
+			dontRunOnErrorCanonicalCallback: true,
+			dontRunAfterCanonicalCallback:   true,
+			wantErr:                         http.ErrNoCookie,
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -810,7 +810,7 @@ func TestModelCallbacks(t *testing.T) {
 			onModelErrorCallbacks := []llmagent.OnModelErrorCallback{
 				func(ctx agent.CallbackContext, llmRequest *model.LLMRequest, llmError error) (*model.LLMResponse, error) {
 					onModelErrorCallbacksCalled = true
-					if tc.dontRunOnError {
+					if tc.dontRunOnErrorCanonicalCallback {
 						t.Error("on model error should not be called")
 					}
 					return nil, nil
@@ -819,7 +819,7 @@ func TestModelCallbacks(t *testing.T) {
 			beforeModelCallbacks := []llmagent.BeforeModelCallback{
 				func(ctx agent.CallbackContext, llmRequest *model.LLMRequest) (*model.LLMResponse, error) {
 					beforeModelCallbacksCalled = true
-					if tc.dontRunBefore {
+					if tc.dontRunBeforeCanonicalCallback {
 						t.Error("before model Callback should not be called")
 					}
 					return nil, nil
@@ -828,7 +828,7 @@ func TestModelCallbacks(t *testing.T) {
 			afterModelCallbacks := []llmagent.AfterModelCallback{
 				func(ctx agent.CallbackContext, llmResponse *model.LLMResponse, llmResponseError error) (*model.LLMResponse, error) {
 					afterModelCallbacksCalled = true
-					if tc.dontRunAfter {
+					if tc.dontRunAfterCanonicalCallback {
 						t.Error("after model Callback should not be called")
 					}
 					return nil, nil
@@ -864,13 +864,13 @@ func TestModelCallbacks(t *testing.T) {
 				t.Fatalf("unexpected result from agent, want: %v, got: %v, diff: %v", tc.wantTexts, texts, diff)
 			}
 
-			if onModelErrorCallbacksCalled == false && tc.dontRunOnError == false {
+			if onModelErrorCallbacksCalled == false && tc.dontRunOnErrorCanonicalCallback == false {
 				t.Error("on model error should be called")
 			}
-			if beforeModelCallbacksCalled == false && tc.dontRunBefore == false {
+			if beforeModelCallbacksCalled == false && tc.dontRunBeforeCanonicalCallback == false {
 				t.Error("before model should be called")
 			}
-			if afterModelCallbacksCalled == false && tc.dontRunAfter == false {
+			if afterModelCallbacksCalled == false && tc.dontRunAfterCanonicalCallback == false {
 				t.Error("after model should be called")
 			}
 		})
