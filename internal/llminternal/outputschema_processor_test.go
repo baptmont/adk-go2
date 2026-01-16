@@ -88,7 +88,8 @@ func TestOutputSchemaRequestProcessor(t *testing.T) {
 			Agent: mockAgent,
 		})
 
-		if err := outputSchemaRequestProcessor(ctx, req, f); err != nil {
+		events := outputSchemaRequestProcessor(ctx, req, f)
+		for _, err := range events {
 			t.Fatalf("outputSchemaRequestProcessor() error = %v", err)
 		}
 
@@ -127,7 +128,8 @@ func TestOutputSchemaRequestProcessor(t *testing.T) {
 			Agent: mockAgent,
 		})
 
-		if err := outputSchemaRequestProcessor(ctx, req, f); err != nil {
+		events := outputSchemaRequestProcessor(ctx, req, f)
+		for _, err := range events {
 			t.Fatalf("outputSchemaRequestProcessor() error = %v", err)
 		}
 
@@ -152,7 +154,8 @@ func TestOutputSchemaRequestProcessor(t *testing.T) {
 			Agent: mockAgent,
 		})
 
-		if err := outputSchemaRequestProcessor(ctx, req, f); err != nil {
+		events := outputSchemaRequestProcessor(ctx, req, f)
+		for _, err := range events {
 			t.Fatalf("outputSchemaRequestProcessor() error = %v", err)
 		}
 
@@ -180,7 +183,8 @@ func TestOutputSchemaRequestProcessor(t *testing.T) {
 			Agent: mockAgent,
 		})
 
-		if err := outputSchemaRequestProcessor(ctx, req, f); err != nil {
+		events := outputSchemaRequestProcessor(ctx, req, f)
+		for _, err := range events {
 			t.Fatalf("outputSchemaRequestProcessor() error = %v", err)
 		}
 

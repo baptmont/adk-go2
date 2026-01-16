@@ -607,7 +607,7 @@ func TestToolConfirmation(t *testing.T) {
 					},
 				}, "model"),
 				genai.NewContentFromFunctionResponse("test_tool", map[string]any{
-					"error": errors.New("tool \"test_tool\" failed: error tool \"test_tool\" requires confirmation, please approve or reject"),
+					"error": errors.New("error tool \"test_tool\" requires confirmation, please approve or reject"),
 				}, "user"),
 			},
 		},
@@ -631,7 +631,7 @@ func TestToolConfirmation(t *testing.T) {
 					},
 				}, "model"),
 				genai.NewContentFromFunctionResponse("test_tool", map[string]any{
-					"error": errors.New("tool \"test_tool\" failed: error tool \"test_tool\" requires confirmation, please approve or reject"),
+					"error": errors.New("error tool \"test_tool\" requires confirmation, please approve or reject"),
 				}, "user"),
 				genai.NewContentFromFunctionResponse("test_tool", map[string]any{"result": "ok"}, "user"),
 			},
@@ -656,10 +656,10 @@ func TestToolConfirmation(t *testing.T) {
 					},
 				}, "model"),
 				genai.NewContentFromFunctionResponse("test_tool", map[string]any{
-					"error": errors.New("tool \"test_tool\" failed: error tool \"test_tool\" requires confirmation, please approve or reject"),
+					"error": errors.New("error tool \"test_tool\" requires confirmation, please approve or reject"),
 				}, "user"),
 				genai.NewContentFromFunctionResponse("test_tool", map[string]any{
-					"error": errors.New("tool \"test_tool\" failed: error tool \"test_tool\" call is rejected"),
+					"error": errors.New("error tool \"test_tool\" call is rejected"),
 				}, "user"),
 			},
 		},
@@ -704,7 +704,7 @@ func TestToolConfirmation(t *testing.T) {
 					},
 				}, "model"),
 				genai.NewContentFromFunctionResponse("test_tool", map[string]any{
-					"error": errors.New("tool \"test_tool\" failed: error tool \"test_tool\" requires confirmation, please approve or reject"),
+					"error": errors.New("error tool \"test_tool\" requires confirmation, please approve or reject"),
 				}, "user"),
 			},
 		},
@@ -733,7 +733,7 @@ func TestToolConfirmation(t *testing.T) {
 					},
 				}, "model"),
 				genai.NewContentFromFunctionResponse("test_tool", map[string]any{
-					"error": errors.New("tool \"test_tool\" failed: error tool \"test_tool\" requires confirmation, please approve or reject"),
+					"error": errors.New("error tool \"test_tool\" requires confirmation, please approve or reject"),
 				}, "user"),
 				genai.NewContentFromFunctionResponse("test_tool", map[string]any{"result": "ok"}, "user"),
 			},
@@ -763,10 +763,10 @@ func TestToolConfirmation(t *testing.T) {
 					},
 				}, "model"),
 				genai.NewContentFromFunctionResponse("test_tool", map[string]any{
-					"error": errors.New("tool \"test_tool\" failed: error tool \"test_tool\" requires confirmation, please approve or reject"),
+					"error": errors.New("error tool \"test_tool\" requires confirmation, please approve or reject"),
 				}, "user"),
 				genai.NewContentFromFunctionResponse("test_tool", map[string]any{
-					"error": errors.New("tool \"test_tool\" failed: error tool \"test_tool\" call is rejected"),
+					"error": errors.New("error tool \"test_tool\" call is rejected"),
 				}, "user"),
 			},
 		},
@@ -886,8 +886,6 @@ func TestToolConfirmation(t *testing.T) {
 			if eventCount != len(tc.want) {
 				t.Errorf("unexpected stream length, want %d got %d", len(tc.want), eventCount)
 			}
-
-			t.Skip("Full test implementation requires mocking ADK context and event flow, and exact type definitions.")
 		})
 	}
 }
