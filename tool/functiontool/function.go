@@ -207,9 +207,12 @@ func (f *functionTool[TArgs, TResults]) Run(ctx tool.Context, args any) (result 
 	}
 	if requireConfirmation || f.requireConfirmation {
 		if ctx.ToolConfirmation() == nil {
-			ctx.RequestConfirmation(
+			err := ctx.RequestConfirmation(
 				fmt.Sprintf("Please approve or reject the tool call %s() by responding with a FunctionResponse with an expected ToolConfirmation payload.",
 					f.Name()), nil)
+			if err != nil {
+				return nil, err
+			}
 			ctx.Actions().SkipSummarization = true
 			return nil, fmt.Errorf("error tool %q requires confirmation, please approve or reject", f.Name())
 		} else if !ctx.ToolConfirmation().Confirmed {

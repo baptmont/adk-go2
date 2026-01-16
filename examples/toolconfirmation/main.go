@@ -98,11 +98,14 @@ func requestVacationDays(ctx tool.Context, args RequestVacationArgs) (*RequestVa
 		pendingRequests[requestID] = req
 		reqMap[ctx.FunctionCallID()] = req
 
-		ctx.RequestConfirmation(
+		err := ctx.RequestConfirmation(
 			"Please approve or reject the tool call request_time_off() by responding with a FunctionResponse with an expected ToolConfirmation payload.",
 			ConfirmationPayload{
 				DaysApproved: 0,
 			})
+		if err != nil {
+			return nil, err
+		}
 		return &RequestVacationResults{
 			Status:    "Manager approval is required.",
 			RequestID: requestID,
@@ -332,7 +335,7 @@ func displayVacationRequests() {
 	fmt.Println("-------------------------------")
 }
 
-func processApproval(ctx context.Context, r *runner.Runner, sessionID string, requestID string, approved bool, reader *bufio.Reader) {
+func processApproval(ctx context.Context, r *runner.Runner, sessionID, requestID string, approved bool, reader *bufio.Reader) {
 	req, exists := pendingRequests[requestID]
 	if !exists || req.Status != "PENDING" {
 		fmt.Printf("Request ID %s not found or not pending.\n", requestID)

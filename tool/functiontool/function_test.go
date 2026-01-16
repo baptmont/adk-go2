@@ -668,10 +668,7 @@ func TestToolConfirmation(t *testing.T) {
 			toolConfig: functiontool.Config{
 				Name: "test_tool",
 				RequireConfirmationProvider: func(args SimpleArgs) bool {
-					if args.Num < 5 {
-						return true
-					}
-					return false
+					return args.Num < 5
 				},
 			},
 			args: map[string]any{"Num": 7},
@@ -685,10 +682,7 @@ func TestToolConfirmation(t *testing.T) {
 			toolConfig: functiontool.Config{
 				Name: "test_tool",
 				RequireConfirmationProvider: func(args SimpleArgs) bool {
-					if args.Num < 5 {
-						return true
-					}
-					return false
+					return args.Num < 5
 				},
 			},
 			args: map[string]any{"Num": 4},
@@ -713,10 +707,7 @@ func TestToolConfirmation(t *testing.T) {
 			toolConfig: functiontool.Config{
 				Name: "test_tool",
 				RequireConfirmationProvider: func(args SimpleArgs) bool {
-					if args.Num < 5 {
-						return true
-					}
-					return false
+					return args.Num < 5
 				},
 			},
 			args:                    map[string]any{"Num": 4},
@@ -743,10 +734,7 @@ func TestToolConfirmation(t *testing.T) {
 			toolConfig: functiontool.Config{
 				Name: "test_tool",
 				RequireConfirmationProvider: func(args SimpleArgs) bool {
-					if args.Num < 5 {
-						return true
-					}
-					return false
+					return args.Num < 5
 				},
 			},
 			args:                    map[string]any{"Num": 4},
