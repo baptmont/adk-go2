@@ -16,7 +16,6 @@ package llminternal
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
 	"iter"
 
@@ -83,22 +82,22 @@ func RequestConfirmationRequestProcessor(ctx agent.InvocationContext, req *model
 						if jsonString, ok := resp.(string); ok {
 							err := json.Unmarshal([]byte(jsonString), &tc)
 							if err != nil {
-								yield(nil, fmt.Errorf("error 'response' key found but failed unmarshalling confirmation function response %w", err))
+								yield(nil, fmt.Errorf("error 'response' key found but failed unmarshalling confirmation function response for event id %q: %w", event.ID, err))
 								return
 							}
 						} else {
-							yield(nil, errors.New("error 'response' key found but value is not a string for confirmation function response"))
+							yield(nil, fmt.Errorf("error 'response' key found but value is not a string for confirmation function response for event id %q:", event.ID))
 							return
 						}
 					} else {
 						tempJSON, err := json.Marshal(funcResp.Response)
 						if err != nil {
-							yield(nil, fmt.Errorf("error failed marshalling confirmation function response: %w", err))
+							yield(nil, fmt.Errorf("error failed marshalling confirmation function response for event id %q: %w", event.ID, err))
 							return
 						}
 						err = json.Unmarshal(tempJSON, &tc)
 						if err != nil {
-							yield(nil, fmt.Errorf("error failed unmarshalling confirmation function response %w", err))
+							yield(nil, fmt.Errorf("error failed unmarshalling confirmation function response for event id %q: %w", event.ID, err))
 							return
 						}
 					}
@@ -113,6 +112,7 @@ func RequestConfirmationRequestProcessor(ctx agent.InvocationContext, req *model
 			return
 		}
 
+		// TODO could we skip events for >= confirmationEventIndex
 		for k := len(events) - 2; k >= 0; k-- {
 			event := events[k]
 			// Find the system generated FunctionCall event requesting the tool confirmation
@@ -152,6 +152,7 @@ func RequestConfirmationRequestProcessor(ctx agent.InvocationContext, req *model
 				continue
 			}
 
+			// TODO consider forward or backward pass instead of nested loops
 			// Remove the tools that have already been confirmed.
 			for j := len(events) - 1; j > confirmationEventIndex; j-- {
 				event = events[j]
@@ -174,8 +175,8 @@ func RequestConfirmationRequestProcessor(ctx agent.InvocationContext, req *model
 			}
 
 			parts := make([]*genai.Part, 0)
-			for tname, fc := range toolsToResumeWithArgs {
-				if _, ok := toolsToResumeConfirmation[tname]; ok {
+			for callID, fc := range toolsToResumeWithArgs {
+				if _, ok := toolsToResumeConfirmation[callID]; ok {
 					parts = append(parts, &genai.Part{FunctionCall: &fc})
 				}
 			}

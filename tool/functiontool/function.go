@@ -47,8 +47,21 @@ type Config struct {
 	// IsLongRunning makes a FunctionTool a long-running operation.
 	IsLongRunning bool
 
+	// RequireConfirmation flags whether this tool must always ask for user confirmation
+	// before execution. If set to true, the ADK framework will automatically initiate
+	// a Human-in-the-Loop (HITL) confirmation request when this tool is invoked.
 	RequireConfirmation bool
 
+	// RequireConfirmationProvider allows for dynamic determination of whether
+	// user confirmation is needed. This field is a function called at runtime to decide if
+	// a confirmation request should be sent. The function takes the tool's input parameters as arguments.
+	// This provider offers more flexibility than the static RequireConfirmation flag,
+	// enabling conditional confirmation based on the invocation details.
+	// If set, this often takes precedence over the RequireConfirmation flag.
+	//
+	// Example signature for a provider function:
+	// func(toolInput ToolArgs) (bool)
+	// Returning true means confirmation is required.
 	RequireConfirmationProvider any
 }
 
@@ -86,29 +99,12 @@ func New[TArgs, TResults any](cfg Config, handler Func[TArgs, TResults]) (tool.T
 	var confirmWrapper func(TArgs) bool
 
 	if cfg.RequireConfirmationProvider != nil {
-		provVal := reflect.ValueOf(cfg.RequireConfirmationProvider)
-		provType := provVal.Type()
-
-		if provType.Kind() != reflect.Func {
-			return nil, fmt.Errorf("error RequireConfirmationProvider must be a function")
+		// Attempt to cast the interface directly to the function signature
+		fn, ok := cfg.RequireConfirmationProvider.(func(TArgs) bool)
+		if !ok {
+			return nil, fmt.Errorf("error RequireConfirmationProvider must be a function with signature func(%T) bool", *new(TArgs))
 		}
-		expectedType := reflect.TypeOf((*TArgs)(nil)).Elem()
-		if provType.NumIn() != 1 {
-			return nil, fmt.Errorf("expected 1 argument for RequireConfirmationProvider, got %d", provType.NumIn())
-		}
-		if provType.In(0) != expectedType {
-			return nil, fmt.Errorf("argument mismatch for RequireConfirmationProvider: expected %v, got %v", expectedType, provType.In(0))
-		}
-		if provType.NumOut() != 1 {
-			return nil, fmt.Errorf("error RequireConfirmationProvider must return exactly 1 value (bool), got %d", provType.NumOut())
-		}
-		if provType.Out(0).Kind() != reflect.Bool {
-			return nil, fmt.Errorf("error RequireConfirmationProvider must return a boolean, got %v", provType.Out(0))
-		}
-		confirmWrapper = func(args TArgs) bool {
-			res := provVal.Call([]reflect.Value{reflect.ValueOf(args)})
-			return res[0].Bool()
-		}
+		confirmWrapper = fn
 	}
 
 	return &functionTool[TArgs, TResults]{

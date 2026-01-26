@@ -1,4 +1,4 @@
-// Copyright 2025 Google LLC
+// Copyright 2026 Google LLC
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -71,6 +71,55 @@ var (
 	requestCounter  = 0
 )
 
+func main() {
+	ctx := context.Background()
+
+	model, err := gemini.NewModel(ctx, "gemini-2.5-flash", &genai.ClientConfig{})
+	if err != nil {
+		log.Fatalf("Failed to create model: %v", err)
+	}
+
+	vacationAgent, err := createRequestVacationDaysAgent(model)
+	if err != nil {
+		log.Fatalf("Failed to create vacation agent: %v", err)
+	}
+
+	sessionService := session.InMemoryService()
+	session, err := sessionService.Create(ctx, &session.CreateRequest{AppName: appName, UserID: userID})
+	if err != nil {
+		log.Fatalf("Failed to create session: %v", err)
+	}
+
+	reader := bufio.NewReader(os.Stdin)
+
+	for {
+		fmt.Println("\n--- Menu ---")
+		fmt.Println("1: Chat with LLM")
+		fmt.Println("2: Manage Vacation Requests")
+		fmt.Println("3: Exit")
+		fmt.Print("Choose an option: ")
+
+		input, err := reader.ReadString('\n')
+		if err != nil {
+			fmt.Printf("Error reading input: %v\n", err)
+			return
+		}
+		input = strings.TrimSpace(input)
+
+		switch input {
+		case "1":
+			runChatSession(ctx, vacationAgent, sessionService, reader, session.Session.ID())
+		case "2":
+			runVacationSession(ctx, vacationAgent, sessionService, reader, session.Session.ID())
+		case "3":
+			fmt.Println("Exiting.")
+			return
+		default:
+			fmt.Println("Invalid option. Please try again.")
+		}
+	}
+}
+
 // requestVacationDays simulates the *initiation* of a long-running ticket creation task.
 func requestVacationDays(ctx tool.Context, args RequestVacationArgs) (*RequestVacationResults, error) {
 	log.Printf("TOOL_EXEC: 'requestVacationDays' called with days: %d for user %s (Call ID: %s)\n", args.Days, args.UserID, ctx.FunctionCallID())
@@ -81,7 +130,6 @@ func requestVacationDays(ctx tool.Context, args RequestVacationArgs) (*RequestVa
 
 	confirmation := ctx.ToolConfirmation()
 	if confirmation == nil {
-
 		requestID := fmt.Sprintf("req-%d", requestCounter)
 		requestCounter++
 
@@ -117,11 +165,7 @@ func requestVacationDays(ctx tool.Context, args RequestVacationArgs) (*RequestVa
 	}
 	req.Confirmation = confirmation
 	if confirmation.Confirmed {
-		payloadMap, ok := confirmation.Payload.(map[string]any)
-		if !ok {
-			return nil, fmt.Errorf("invalid response to request %s", confirmation.Payload)
-		}
-		jsonBytes, err := json.Marshal(payloadMap)
+		jsonBytes, err := json.Marshal(confirmation.Payload)
 		if err != nil {
 			return nil, fmt.Errorf("error marshalling payload %s: %w", confirmation.Payload, err)
 		}
@@ -150,7 +194,7 @@ func requestVacationDays(ctx tool.Context, args RequestVacationArgs) (*RequestVa
 	}
 }
 
-func createRequestVacationDaysAgent(ctx context.Context, model model.LLM) (agent.Agent, error) {
+func createRequestVacationDaysAgent(model model.LLM) (agent.Agent, error) {
 	vacationTool, err := functiontool.New(
 		functiontool.Config{
 			Name:        "request_vacation_days",
@@ -194,11 +238,11 @@ func runTurn(ctx context.Context, r *runner.Runner, sessionID string, content *g
 					if !ok {
 						continue
 					}
-					var originalFunctionCall genai.FunctionCall
 					jsonBytes, err := json.Marshal(originalCallRaw)
 					if err != nil {
 						continue
 					}
+					var originalFunctionCall genai.FunctionCall
 					if err := json.Unmarshal(jsonBytes, &originalFunctionCall); err != nil {
 						continue
 					}
@@ -210,51 +254,6 @@ func runTurn(ctx context.Context, r *runner.Runner, sessionID string, content *g
 					req.CallID = fc.ID
 				}
 			}
-		}
-	}
-}
-
-func main() {
-	ctx := context.Background()
-
-	model, err := gemini.NewModel(ctx, "gemini-2.5-flash", &genai.ClientConfig{})
-	if err != nil {
-		log.Fatalf("Failed to create model: %v", err)
-	}
-
-	vacationAgent, err := createRequestVacationDaysAgent(ctx, model)
-	if err != nil {
-		log.Fatalf("Failed to create vacation agent: %v", err)
-	}
-
-	sessionService := session.InMemoryService()
-	session, err := sessionService.Create(ctx, &session.CreateRequest{AppName: appName, UserID: userID})
-	if err != nil {
-		log.Fatalf("Failed to create session: %v", err)
-	}
-
-	reader := bufio.NewReader(os.Stdin)
-
-	for {
-		fmt.Println("\n--- Menu ---")
-		fmt.Println("1: Chat with LLM")
-		fmt.Println("2: Manage Vacation Requests")
-		fmt.Println("3: Exit")
-		fmt.Print("Choose an option: ")
-
-		input, _ := reader.ReadString('\n')
-		input = strings.TrimSpace(input)
-
-		switch input {
-		case "1":
-			runChatSession(ctx, vacationAgent, sessionService, reader, session.Session.ID())
-		case "2":
-			runVacationSession(ctx, vacationAgent, sessionService, reader, session.Session.ID())
-		case "3":
-			fmt.Println("Exiting.")
-			return
-		default:
-			fmt.Println("Invalid option. Please try again.")
 		}
 	}
 }
@@ -389,11 +388,11 @@ func printEventSummary(event *session.Event) {
 			}
 			// Check for a function call part.
 			if fc := part.FunctionCall; fc != nil {
-				fmt.Printf("[%s_CALL]: %s(%v) ID: %s\n", author, fc.Name, fc.Args, fc.ID)
+				fmt.Printf("[%s_CALL]: %s(%v) Call ID: %s\n", author, fc.Name, fc.Args, fc.ID)
 			}
 			// Check for a function response part.
 			if fr := part.FunctionResponse; fr != nil {
-				fmt.Printf("[%s_RESPONSE]: %s(%v) ID: %s\n", author, fr.Name, fr.Response, fr.ID)
+				fmt.Printf("[%s_RESPONSE]: %s(%v) Call ID: %s\n", author, fr.Name, fr.Response, fr.ID)
 			}
 		}
 	}

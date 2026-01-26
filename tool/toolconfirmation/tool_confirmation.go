@@ -1,4 +1,4 @@
-// Copyright 2025 Google LLC
+// Copyright 2026 Google LLC
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -12,13 +12,24 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Package tool defines the interfaces for tools that can be called by an agent.
-// A tool is a piece of code that performs a specific task. You can either define
-// your own custom tools or use built-in ones, for example, GoogleSearch.
+// Package toolconfirmation provides structures and utilities for handling
+// Human-in-the-Loop tool execution confirmations within the ADK.
 package toolconfirmation
 
+// ToolConfirmation represents the state and details of a user confirmation request
+// for a tool execution.
 type ToolConfirmation struct {
-	Hint      string
+	// Hint is the message provided to the user to explain why the confirmation
+	// is needed and what action is being confirmed.
+	Hint string
+
+	// Confirmed indicates the user's decision.
+	// true if the user approved the action, false if they denied it.
+	// The state before the user has responded is typically handled outside
+	// this struct (e.g., by the absence of a result or a pending status).
 	Confirmed bool
-	Payload   any
+
+	// Payload contains any additional data or context related to the confirmation request.
+	// The structure of the Payload is application-specific.
+	Payload any
 }

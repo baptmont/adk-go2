@@ -893,69 +893,70 @@ func TestNew_RequireConfirmationProvider_Validation(t *testing.T) {
 		return TestResult{Value: 1}, nil
 	}
 
+	expectedError := fmt.Sprintf("error RequireConfirmationProvider must be a function with signature func(%T) bool", TestArgs{})
+
 	tests := []struct {
-		name          string
-		provider      any    // The RequireConfirmationProvider value to test
-		expectedError string // Substring expected in the error message; empty if no error expected
+		name         string
+		provider     any  // The RequireConfirmationProvider value to test
+		expectsError bool // Substring expected in the error message; empty if no error expected
 	}{
 		// --- Happy Paths ---
 		{
-			name:          "Valid: Nil provider is allowed",
-			provider:      nil,
-			expectedError: "",
+			name:         "Valid: Nil provider is allowed",
+			provider:     nil,
+			expectsError: false,
 		},
 		{
-			name:          "Valid: Correct function signature",
-			provider:      func(args TestArgs) bool { return true },
-			expectedError: "",
+			name:         "Valid: Correct function signature",
+			provider:     func(args TestArgs) bool { return true },
+			expectsError: false,
 		},
 
 		// --- Edge Cases / Validation Errors ---
 		{
-			name:          "Invalid: Provider is not a function (it's a struct)",
-			provider:      struct{}{},
-			expectedError: "RequireConfirmationProvider must be a function",
+			name:         "Invalid: Provider is not a function (it's a struct)",
+			provider:     struct{}{},
+			expectsError: true,
 		},
 		{
-			name:          "Invalid: Provider is not a function (it's a primitive)",
-			provider:      123,
-			expectedError: "RequireConfirmationProvider must be a function",
+			name:         "Invalid: Provider is not a function (it's a primitive)",
+			provider:     123,
+			expectsError: true,
 		},
 		{
-			name:          "Invalid: Function has 0 arguments",
-			provider:      func() bool { return true },
-			expectedError: "expected 1 argument for RequireConfirmationProvider, got 0",
+			name:         "Invalid: Function has 0 arguments",
+			provider:     func() bool { return true },
+			expectsError: true,
 		},
 		{
-			name:          "Invalid: Function has too many arguments (2)",
-			provider:      func(a TestArgs, b int) bool { return true },
-			expectedError: "expected 1 argument for RequireConfirmationProvider, got 2",
+			name:         "Invalid: Function has too many arguments (2)",
+			provider:     func(a TestArgs, b int) bool { return true },
+			expectsError: true,
 		},
 		{
-			name:          "Invalid: Argument type mismatch (int instead of TestArgs)",
-			provider:      func(n int) bool { return true },
-			expectedError: fmt.Sprintf("argument mismatch for RequireConfirmationProvider: expected %T, got int", TestArgs{}),
+			name:         "Invalid: Argument type mismatch (int instead of TestArgs)",
+			provider:     func(n int) bool { return true },
+			expectsError: true,
 		},
 		{
-			name:          "Invalid: Argument type mismatch (pointer vs value)",
-			provider:      func(a *TestArgs) bool { return true },
-			expectedError: fmt.Sprintf("argument mismatch for RequireConfirmationProvider: expected %T, got %T", TestArgs{}, (*TestArgs)(nil)),
+			name:         "Invalid: Argument type mismatch (pointer vs value)",
+			provider:     func(a *TestArgs) bool { return true },
+			expectsError: true,
 		},
 		{
-			name:     "Invalid: Function returns nothing",
-			provider: func(args TestArgs) {},
-			// Adjust this string to match your specific error message
-			expectedError: "RequireConfirmationProvider must return exactly 1 value",
+			name:         "Invalid: Function returns nothing",
+			provider:     func(args TestArgs) {},
+			expectsError: true,
 		},
 		{
-			name:          "Invalid: Function returns too many values",
-			provider:      func(args TestArgs) (bool, error) { return true, nil },
-			expectedError: "RequireConfirmationProvider must return exactly 1 value",
+			name:         "Invalid: Function returns too many values",
+			provider:     func(args TestArgs) (bool, error) { return true, nil },
+			expectsError: true,
 		},
 		{
-			name:          "Invalid: Return type mismatch (returns int instead of bool)",
-			provider:      func(args TestArgs) int { return 1 },
-			expectedError: "RequireConfirmationProvider must return a boolean",
+			name:         "Invalid: Return type mismatch (returns int instead of bool)",
+			provider:     func(args TestArgs) int { return 1 },
+			expectsError: true,
 		},
 	}
 
@@ -969,7 +970,7 @@ func TestNew_RequireConfirmationProvider_Validation(t *testing.T) {
 			tool, err := functiontool.New(cfg, dummyHandler)
 
 			// Check results
-			if tt.expectedError == "" {
+			if !tt.expectsError {
 				if err != nil {
 					t.Fatalf("unexpected error: %v", err)
 				}
@@ -979,8 +980,8 @@ func TestNew_RequireConfirmationProvider_Validation(t *testing.T) {
 			} else {
 				if err == nil {
 					t.Error("expected error but got nil")
-				} else if !strings.Contains(err.Error(), tt.expectedError) {
-					t.Errorf("error message mismatch.\nExpected substring: %q\nGot: %q", tt.expectedError, err.Error())
+				} else if !strings.Contains(err.Error(), expectedError) {
+					t.Errorf("error message mismatch.\nExpected substring: %q\nGot: %q", expectedError, err.Error())
 				}
 			}
 		})
