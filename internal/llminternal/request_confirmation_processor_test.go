@@ -58,15 +58,17 @@ func (m *mockTool) Run(ctx tool.Context, args any) (map[string]any, error) {
 	return map[string]any{"result": "Mock tool result with test"}, nil
 }
 
-func newMockLlmAgent() (agent.Agent, error) {
+func newMockLlmAgent() (agent.Agent, []tool.Tool, error) {
 	testModel := &testModel{}
-	return llmagent.New(llmagent.Config{
+	tools := []tool.Tool{
+		&mockTool{name: "mock_tool"},
+	}
+	agnt, err := llmagent.New(llmagent.Config{
 		Name:  "testAgent",
 		Model: testModel,
-		Tools: []tool.Tool{
-			&mockTool{name: "mock_tool"},
-		},
+		Tools: tools,
 	})
+	return agnt, tools, err
 }
 
 func createInvocationContext(t *testing.T, agnt agent.Agent, sess session.Session) agent.InvocationContext {
@@ -237,7 +239,7 @@ func TestRequestConfirmationRequestProcessor(t *testing.T) {
 	// 3. Execution Loop
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			agnt, err := newMockLlmAgent()
+			agnt, tools, err := newMockLlmAgent()
 			if err != nil {
 				t.Fatalf("error creating mock llmagent: %v", err)
 			}
@@ -247,7 +249,7 @@ func TestRequestConfirmationRequestProcessor(t *testing.T) {
 			})
 			llmRequest := &model.LLMRequest{}
 
-			iter := llminternal.RequestConfirmationRequestProcessor(invocationContext, llmRequest, &llminternal.Flow{})
+			iter := llminternal.RequestConfirmationRequestProcessor(invocationContext, llmRequest, &llminternal.Flow{Tools: tools})
 
 			var gotEvents []*session.Event
 			for event, err := range iter {

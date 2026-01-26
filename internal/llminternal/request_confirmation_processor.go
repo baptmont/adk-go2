@@ -22,7 +22,6 @@ import (
 	"google.golang.org/genai"
 
 	"google.golang.org/adk/agent"
-	icontext "google.golang.org/adk/internal/context"
 	"google.golang.org/adk/internal/utils"
 	"google.golang.org/adk/model"
 	"google.golang.org/adk/session"
@@ -37,18 +36,8 @@ func RequestConfirmationRequestProcessor(ctx agent.InvocationContext, req *model
 			return // In python, no error is yielded.
 		}
 
-		tools := Reveal(llmAgent).Tools
-		for _, toolSet := range Reveal(llmAgent).Toolsets {
-			tsTools, err := toolSet.Tools(icontext.NewReadonlyContext(ctx))
-			if err != nil {
-				yield(nil, fmt.Errorf("failed to extract tools from the tool set %q: %w", toolSet.Name(), err))
-				return
-			}
-
-			tools = append(tools, tsTools...)
-		}
 		toolsmap := make(map[string]tool.Tool)
-		for _, tool := range tools {
+		for _, tool := range f.Tools {
 			toolsmap[tool.Name()] = tool
 		}
 

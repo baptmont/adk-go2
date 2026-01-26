@@ -56,6 +56,7 @@ type OnToolErrorCallback func(ctx tool.Context, tool tool.Tool, args map[string]
 type Flow struct {
 	Model model.LLM
 
+	Tools                 []tool.Tool
 	RequestProcessors     []func(ctx agent.InvocationContext, req *model.LLMRequest, f *Flow) iter.Seq2[*session.Event, error]
 	ResponseProcessors    []func(ctx agent.InvocationContext, req *model.LLMRequest, resp *model.LLMResponse) error
 	BeforeModelCallbacks  []BeforeModelCallback
@@ -69,6 +70,7 @@ type Flow struct {
 var (
 	DefaultRequestProcessors = []func(ctx agent.InvocationContext, req *model.LLMRequest, f *Flow) iter.Seq2[*session.Event, error]{
 		basicRequestProcessor,
+		toolProcessor,
 		authPreprocessor,
 		RequestConfirmationRequestProcessor,
 		instructionsRequestProcessor,
@@ -242,12 +244,6 @@ func (f *Flow) runOneStep(ctx agent.InvocationContext) iter.Seq2[*session.Event,
 
 func (f *Flow) preprocess(ctx agent.InvocationContext, req *model.LLMRequest) iter.Seq2[*session.Event, error] {
 	return func(yield func(*session.Event, error) bool) {
-		llmAgent, ok := ctx.Agent().(Agent)
-		if !ok {
-			yield(nil, fmt.Errorf("agent %v is not an LLMAgent", ctx.Agent().Name()))
-			return
-		}
-
 		// apply request processor functions to the request in the configured order.
 		for _, processor := range f.RequestProcessors {
 			for ev, err := range processor(ctx, req, f) {
@@ -261,20 +257,10 @@ func (f *Flow) preprocess(ctx agent.InvocationContext, req *model.LLMRequest) it
 			}
 		}
 
-		// run processors for tools.
-		tools := Reveal(llmAgent).Tools
-		for _, toolSet := range Reveal(llmAgent).Toolsets {
-			tsTools, err := toolSet.Tools(icontext.NewReadonlyContext(ctx))
-			if err != nil {
-				yield(nil, fmt.Errorf("failed to extract tools from the tool set %q: %w", toolSet.Name(), err))
-				return
+		if f.Tools != nil {
+			if err := toolPreprocess(ctx, req, f.Tools); err != nil {
+				yield(nil, err)
 			}
-
-			tools = append(tools, tsTools...)
-		}
-
-		if err := toolPreprocess(ctx, req, tools); err != nil {
-			yield(nil, err)
 		}
 	}
 }
