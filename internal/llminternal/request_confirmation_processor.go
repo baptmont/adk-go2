@@ -86,7 +86,7 @@ func RequestConfirmationRequestProcessor(ctx agent.InvocationContext, req *model
 								return
 							}
 						} else {
-							yield(nil, fmt.Errorf("error 'response' key found but value is not a string for confirmation function response for event id %q:", event.ID))
+							yield(nil, fmt.Errorf("error 'response' key found but value is not a string for confirmation function response for event id %q", event.ID))
 							return
 						}
 					} else {
