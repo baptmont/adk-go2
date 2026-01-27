@@ -59,8 +59,9 @@ type Config struct {
 	// enabling conditional confirmation based on the invocation details.
 	// If set, this often takes precedence over the RequireConfirmation flag.
 	//
-	// Example signature for a provider function:
+	// Required signature for a provider function:
 	// func(toolInput ToolArgs) (bool)
+	// where ToolArgs is the input type of your go function
 	// Returning true means confirmation is required.
 	RequireConfirmationProvider any
 }
