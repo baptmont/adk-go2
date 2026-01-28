@@ -63,6 +63,26 @@ type ToolConfirmation struct {
 	Payload any
 }
 
+// OriginalCallFrom retrieves the underlying, original function call from a tool confirmation wrapper.
+//
+// In the ADK Tool Confirmation workflow, the model will wrap a desired tool execution inside a
+// "RequestConfirmation" call. This helper extracts that inner intent so it can be mapped back
+// to pending requests or queued for execution.
+//
+// It handles the "originalFunctionCall" argument in two formats:
+//  1. *genai.FunctionCall: Returns the object directly if already typed.
+//  2. map[string]any: Deserializes the raw JSON map received from the model.
+//
+// Usage:
+// This is typically used when processing a "RequestConfirmation" event to identify which
+// tool the model actually wants to run.
+//
+// Parameters:
+//   - functionCall: The wrapper function call (e.g., RequestConfirmation) containing the arguments.
+//
+// Returns:
+//   - *genai.FunctionCall: The extracted original tool call.
+//   - error: If the "originalFunctionCall" argument is missing or malformed.
 func OriginalCallFrom(functionCall *genai.FunctionCall) (*genai.FunctionCall, error) {
 	if functionCall == nil || functionCall.Args == nil {
 		return nil, fmt.Errorf("functionCall or its arguments cannot be nil")
