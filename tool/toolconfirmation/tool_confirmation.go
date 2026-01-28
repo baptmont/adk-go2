@@ -99,8 +99,6 @@ func OriginalCallFrom(functionCall *genai.FunctionCall) (*genai.FunctionCall, er
 		return originalCall, nil
 	}
 
-	// Check for type correctness
-	// This helps debug if the LLM sent a stringified JSON instead of an object
 	originalCallRaw, ok := val.(map[string]any)
 	if !ok {
 		return nil, fmt.Errorf("argument %q has invalid type: expected JSON object (map[string]any) or *genai.FunctionCall, got %T", key, val)
