@@ -28,7 +28,7 @@ import (
 	"google.golang.org/adk/tool"
 )
 
-func convertTool(t *mcp.Tool, client MCPClient) (tool.Tool, error) {
+func convertTool(t *mcp.Tool, client MCPClient, requireConfirmation bool, requireConfirmationProvider func(any) bool) (tool.Tool, error) {
 	mcp := &mcpTool{
 		name:        t.Name,
 		description: t.Description,
@@ -36,7 +36,9 @@ func convertTool(t *mcp.Tool, client MCPClient) (tool.Tool, error) {
 			Name:        t.Name,
 			Description: t.Description,
 		},
-		mcpClient: client,
+		mcpClient:                   client,
+		requireConfirmation:         requireConfirmation,
+		requireConfirmationProvider: requireConfirmationProvider,
 	}
 
 	// Since t.InputSchema and t.OutputSchema are pointers (*jsonschema.Schema) and the destination ResponseJsonSchema
@@ -59,6 +61,10 @@ type mcpTool struct {
 	funcDeclaration *genai.FunctionDeclaration
 
 	mcpClient MCPClient
+
+	requireConfirmation bool
+
+	requireConfirmationProvider func(any) bool
 }
 
 // Name implements the tool.Tool.
@@ -85,6 +91,25 @@ func (t *mcpTool) Declaration() *genai.FunctionDeclaration {
 }
 
 func (t *mcpTool) Run(ctx tool.Context, args any) (map[string]any, error) {
+	requireConfirmation := false
+	if t.requireConfirmationProvider != nil {
+		requireConfirmation = t.requireConfirmationProvider(args)
+	}
+	if requireConfirmation || t.requireConfirmation {
+		if ctx.ToolConfirmation() == nil {
+			err := ctx.RequestConfirmation(
+				fmt.Sprintf("Please approve or reject the tool call %s() by responding with a FunctionResponse with an expected ToolConfirmation payload.",
+					t.Name()), nil)
+			if err != nil {
+				return nil, err
+			}
+			ctx.Actions().SkipSummarization = true
+			return nil, fmt.Errorf("error tool %q requires confirmation, please approve or reject", t.Name())
+		} else if !ctx.ToolConfirmation().Confirmed {
+			return nil, fmt.Errorf("error tool %q call is rejected", t.Name())
+		}
+	}
+
 	// TODO: add auth
 	res, err := t.mcpClient.CallTool(ctx, &mcp.CallToolParams{
 		Name:      t.name,

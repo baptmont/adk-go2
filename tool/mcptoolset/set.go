@@ -47,9 +47,22 @@ import (
 //		},
 //	})
 func New(cfg Config) (tool.Toolset, error) {
+	var confirmFunc func(any) bool
+
+	if cfg.RequireConfirmationProvider != nil {
+		// Attempt to cast the interface directly to the function signature
+		fn, ok := cfg.RequireConfirmationProvider.(func(any) bool)
+		if !ok {
+			return nil, fmt.Errorf("error RequireConfirmationProvider must be a function with signature func(%T) bool", *new(any))
+		}
+		confirmFunc = fn
+	}
+
 	return &set{
-		mcpClient:  newConnectionRefresher(cfg.Client, cfg.Transport),
-		toolFilter: cfg.ToolFilter,
+		mcpClient:                   newConnectionRefresher(cfg.Client, cfg.Transport),
+		toolFilter:                  cfg.ToolFilter,
+		requireConfirmation:         cfg.RequireConfirmation,
+		requireConfirmationProvider: confirmFunc,
 	}, nil
 }
 
@@ -64,11 +77,31 @@ type Config struct {
 	// If ToolFilter is nil, then all tools are returned.
 	// tool.StringPredicate can be convenient if there's a known fixed list of tool names.
 	ToolFilter tool.Predicate
+
+	// RequireConfirmation flags whether this tool must always ask for user confirmation
+	// before execution. If set to true, the ADK framework will automatically initiate
+	// a Human-in-the-Loop (HITL) confirmation request when this tool is invoked.
+	RequireConfirmation bool
+
+	// RequireConfirmationProvider allows for dynamic determination of whether
+	// user confirmation is needed. This field is a function called at runtime to decide if
+	// a confirmation request should be sent. The function takes the tool's input parameters as arguments.
+	// This provider offers more flexibility than the static RequireConfirmation flag,
+	// enabling conditional confirmation based on the invocation details.
+	// If set, this often takes precedence over the RequireConfirmation flag.
+	//
+	// Required signature for a provider function:
+	// func(toolInput ToolArgs) (bool)
+	// where ToolArgs is the input type of your go function
+	// Returning true means confirmation is required.
+	RequireConfirmationProvider any
 }
 
 type set struct {
-	mcpClient  MCPClient
-	toolFilter tool.Predicate
+	mcpClient                   MCPClient
+	toolFilter                  tool.Predicate
+	requireConfirmation         bool
+	requireConfirmationProvider func(any) bool
 }
 
 func (*set) Name() string {
@@ -92,7 +125,7 @@ func (s *set) Tools(ctx agent.ReadonlyContext) ([]tool.Tool, error) {
 
 	var adkTools []tool.Tool
 	for _, mcpTool := range mcpTools {
-		t, err := convertTool(mcpTool, s.mcpClient)
+		t, err := convertTool(mcpTool, s.mcpClient, s.requireConfirmation, s.requireConfirmationProvider)
 		if err != nil {
 			return nil, fmt.Errorf("failed to convert MCP tool %q to adk tool: %w", mcpTool.Name, err)
 		}
