@@ -693,3 +693,117 @@ func TestMCPToolSetConfirmation(t *testing.T) {
 		})
 	}
 }
+
+// Mock types for TArgs and TResults
+type TestArgs struct {
+	Name string
+}
+
+type TestResult struct {
+	Value int
+}
+
+func TestNewToolSet_RequireConfirmationProvider_Validation(t *testing.T) {
+	expectedError := "error RequireConfirmationProvider must be a function with signature func(any) bool"
+
+	tests := []struct {
+		name         string
+		provider     any  // The RequireConfirmationProvider value to test
+		expectsError bool // Substring expected in the error message; empty if no error expected
+	}{
+		// --- Happy Paths ---
+		{
+			name:         "Valid: Nil provider is allowed",
+			provider:     nil,
+			expectsError: false,
+		},
+		{
+			name:         "Valid: Correct function signature",
+			provider:     func(args any) bool { return true },
+			expectsError: false,
+		},
+
+		// --- Edge Cases / Validation Errors ---
+		{
+			name:         "Invalid: Provider is not a function (it's a struct)",
+			provider:     struct{}{},
+			expectsError: true,
+		},
+		{
+			name:         "Invalid: Provider is not a function (it's a primitive)",
+			provider:     123,
+			expectsError: true,
+		},
+		{
+			name:         "Invalid: Function has 0 arguments",
+			provider:     func() bool { return true },
+			expectsError: true,
+		},
+		{
+			name:         "Invalid: Function has too many arguments (2)",
+			provider:     func(a any, b int) bool { return true },
+			expectsError: true,
+		},
+		{
+			name:         "Invalid: Argument type mismatch (int instead of any)",
+			provider:     func(n int) bool { return true },
+			expectsError: true,
+		},
+		{
+			name:         "Invalid: Argument type mismatch (pointer vs value)",
+			provider:     func(a *any) bool { return true },
+			expectsError: true,
+		},
+		{
+			name:         "Invalid: Function returns nothing",
+			provider:     func(args any) {},
+			expectsError: true,
+		},
+		{
+			name:         "Invalid: Function returns too many values",
+			provider:     func(args any) (bool, error) { return true, nil },
+			expectsError: true,
+		},
+		{
+			name:         "Invalid: Return type mismatch (returns int instead of bool)",
+			provider:     func(args any) int { return 1 },
+			expectsError: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Construct config with the provider under test
+			clientTransport, serverTransport := mcp.NewInMemoryTransports()
+
+			// Run in-memory MCP server.
+			server := mcp.NewServer(&mcp.Implementation{Name: "test", Version: "v1.0.0"}, nil)
+			mcp.AddTool(server, &mcp.Tool{Name: "test", Description: "test"}, weatherFunc)
+			_, err := server.Connect(t.Context(), serverTransport, nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			toolSetConfig := mcptoolset.Config{
+				Transport:                   clientTransport,
+				RequireConfirmationProvider: tt.provider,
+			}
+			toolset, err := mcptoolset.New(toolSetConfig)
+			// Check results
+			if !tt.expectsError {
+				if err != nil {
+					t.Fatalf("unexpected error: %v", err)
+				}
+				if toolset == nil {
+					t.Error("expected valid toolset, got nil")
+				}
+			} else {
+				if err == nil {
+					t.Error("expected error but got nil")
+				} else if !strings.Contains(err.Error(), expectedError) {
+					t.Errorf("error message mismatch.\nExpected substring: %q\nGot: %q", expectedError, err.Error())
+				}
+			}
+		})
+	}
+}

@@ -53,7 +53,7 @@ func New(cfg Config) (tool.Toolset, error) {
 		// Attempt to cast the interface directly to the function signature
 		fn, ok := cfg.RequireConfirmationProvider.(func(any) bool)
 		if !ok {
-			return nil, fmt.Errorf("error RequireConfirmationProvider must be a function with signature func(%T) bool", *new(any))
+			return nil, fmt.Errorf("error RequireConfirmationProvider must be a function with signature func(any) bool")
 		}
 		confirmFunc = fn
 	}
@@ -91,8 +91,7 @@ type Config struct {
 	// If set, this often takes precedence over the RequireConfirmation flag.
 	//
 	// Required signature for a provider function:
-	// func(toolInput ToolArgs) (bool)
-	// where ToolArgs is the input type of your go function
+	// func(toolInput any) (bool)
 	// Returning true means confirmation is required.
 	RequireConfirmationProvider any
 }
