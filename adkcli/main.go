@@ -16,7 +16,9 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"io/fs"
 	"log"
 	"os"
 	"path/filepath"
@@ -27,6 +29,7 @@ import (
 	"google.golang.org/adk/cmd/launcher"
 	"google.golang.org/adk/cmd/launcher/full"
 	"google.golang.org/adk/config"
+	"google.golang.org/adk/model"
 	"google.golang.org/adk/plugin"
 	"google.golang.org/adk/plugin/replayplugin"
 	"google.golang.org/adk/runner"
@@ -40,26 +43,57 @@ func main() {
 		log.Fatalf("Error getting current directory: %v", err)
 	}
 
-	// 2. Look for the configuration file
-	configPath := filepath.Join(cwd, "root_agent.yaml")
+	fmt.Printf("🔍 Scanning for 'root_agent.yaml' in: %s\n", cwd)
 
-	// Check if file exists
-	if _, err := os.Stat(configPath); os.IsNotExist(err) {
-		fmt.Printf("❌ No 'root_agent.yaml' found in %s\n", cwd)
-		fmt.Println("Usage: Go to a folder with a 'root_agent.yaml' and run 'adk'")
+	// 2. Crawl folder structure to find all configs
+	var agentConfigs []string
+
+	err = filepath.WalkDir(cwd, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			// Report error but continue walking other files
+			fmt.Printf("Warning: skipping %q due to error: %v\n", path, err)
+			return nil
+		}
+
+		// Check if it matches the filename we are looking for 
+		if !d.IsDir() && d.Name() == "root_agent.yaml" {
+			agentConfigs = append(agentConfigs, path)
+		}
+		return nil
+	})
+	if err != nil {
+		log.Fatalf("Error walking the path: %v", err)
+	}
+
+	// 3. Check if we found anything
+	if len(agentConfigs) == 0 {
+		fmt.Printf("❌ No 'root_agent.yaml' files found in %s or subdirectories\n", cwd)
 		os.Exit(1)
 	}
 
-	fmt.Printf("🚀 Found agent config in: %s\n", cwd)
+	fmt.Printf("🚀 Found %d agent config(s)\n", len(agentConfigs))
+	agentsMap := make(map[string]agent.Agent, len(agentConfigs))
+	// 4. Iterate and Load all agents found
+	for _, configPath := range agentConfigs {
+		fmt.Printf("➡️  Loading agent from: %s\n", configPath)
 
-	// 3. Load the agent using the Factory we built earlier
-	// This reads the YAML, finds the 'agent_class', and calls the registered factory.
-	myAgent, err := config.FromConfig(context.Background(), configPath)
-	if err != nil {
-		log.Fatalf("Error loading agent: %v", err)
+		// This reads the YAML, finds the 'agent_class', and calls the registered factory.
+		myAgent, err := config.FromConfig(context.Background(), configPath)
+		if err != nil {
+			log.Printf("⚠️  Error loading agent at %s: %v", configPath, err)
+			continue // Skip this one and try the next
+		}
+		fmt.Printf("✅ Agent loaded successfully: %s\n", myAgent.Name())
+
+		folderName := filepath.Base(filepath.Dir(configPath))
+		fmt.Printf("✅ Agent folder name: %s\n", folderName)
+
+		if _, ok := agentsMap[folderName]; ok {
+			log.Printf("⚠️  Agent %s already exists, skipping", folderName)
+			continue
+		}
+		agentsMap[folderName] = myAgent
 	}
-
-	fmt.Printf("✅ Agent loaded successfully: %s\n", myAgent.Name())
 
 	ctx := context.Background()
 
@@ -67,6 +101,13 @@ func main() {
 		Name: "test",
 		BeforeAgentCallback: func(ctx agent.CallbackContext) (*genai.Content, error) {
 			fmt.Printf("\n🤖 BeforeAgentCallback for %s\n", ctx.AgentName())
+			return nil, nil
+		},
+		BeforeModelCallback: func(ctx agent.CallbackContext, llmRequest *model.LLMRequest) (*model.LLMResponse, error) {
+			fmt.Printf("\n🤖 BeforeModelCallback for %s\n", ctx.AgentName())
+			fmt.Printf("🤖 %s , %s , %s\n", ctx.AppName(), ctx.UserID(), ctx.SessionID())
+			jsonBytes, _ := json.MarshalIndent(llmRequest.Contents, "", "  ")
+			fmt.Printf("🤖 %s\n", jsonBytes)
 			return nil, nil
 		},
 		AfterToolCallback: func(ctx tool.Context, tool tool.Tool, args, result map[string]any, err error) (map[string]any, error) {
@@ -78,8 +119,13 @@ func main() {
 		log.Fatalf("Error loading plugin: %v", err)
 	}
 
+	loader, err := agent.NewMultiLoaderTest(agentsMap)
+	if err != nil {
+		log.Fatalf("Error loading agent: %v", err)
+	}
+
 	config := &launcher.Config{
-		AgentLoader: agent.NewSingleLoader(myAgent),
+		AgentLoader: loader,
 		PluginConfig: runner.PluginConfig{
 			Plugins: []*plugin.Plugin{
 				p,

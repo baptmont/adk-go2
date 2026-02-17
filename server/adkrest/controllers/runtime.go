@@ -97,35 +97,41 @@ func (c *RuntimeAPIController) RunSSEHandler(rw http.ResponseWriter, req *http.R
 	deadline := time.Now().Add(c.sseTimeout)
 	err := rc.SetWriteDeadline(deadline)
 	if err != nil {
+		fmt.Printf("failed to set write deadline: %v\n", err)
 		return newStatusError(fmt.Errorf("failed to set write deadline: %w", err), http.StatusInternalServerError)
 	}
 
 	runAgentRequest, err := decodeRequestBody(req)
 	if err != nil {
+		fmt.Printf("failed to decode request body: %v\n", err)
 		return err
 	}
 
 	err = c.validateSessionExists(req.Context(), runAgentRequest.AppName, runAgentRequest.UserId, runAgentRequest.SessionId)
 	if err != nil {
+		fmt.Printf("failed to validate session: %v\n", err)
 		return err
 	}
 
 	r, rCfg, err := c.getRunner(runAgentRequest)
 	if err != nil {
+		fmt.Printf("failed to get runner: %v\n", err)
 		return err
 	}
 
-	resp := r.Run(req.Context(), runAgentRequest.UserId, runAgentRequest.SessionId, &runAgentRequest.NewMessage, *rCfg)
+	resp := r.Run(req.Context(), runAgentRequest.UserId, runAgentRequest.SessionId, &runAgentRequest.NewMessage, *rCfg, runner.WithStateDelta(*runAgentRequest.StateDelta))
 
 	rw.WriteHeader(http.StatusOK)
 	for event, err := range resp {
 		if err != nil {
 			_, err := fmt.Fprintf(rw, "Error while running agent: %v\n", err)
 			if err != nil {
+				fmt.Printf("failed to write response: %v\n", err)
 				return newStatusError(fmt.Errorf("failed to write response: %w", err), http.StatusInternalServerError)
 			}
 			err = rc.Flush()
 			if err != nil {
+				fmt.Printf("failed to flush: %v\n", err)
 				return newStatusError(fmt.Errorf("failed to flush: %w", err), http.StatusInternalServerError)
 			}
 
@@ -133,6 +139,7 @@ func (c *RuntimeAPIController) RunSSEHandler(rw http.ResponseWriter, req *http.R
 		}
 		err := flashEvent(rc, rw, *event)
 		if err != nil {
+			fmt.Printf("failed to flash event: %v\n", err)
 			return err
 		}
 	}

@@ -17,6 +17,7 @@ package controllers
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 )
 
@@ -30,6 +31,8 @@ func EncodeJSONResponse(i any, status int, w http.ResponseWriter) {
 	w.WriteHeader(status)
 
 	if i != nil {
+		debugBytes, _ := json.MarshalIndent(i, "", "  ")
+		fmt.Printf("Response Payload:\n%s\n", string(debugBytes))
 		err := json.NewEncoder(w).Encode(i)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)

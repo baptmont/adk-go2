@@ -138,7 +138,7 @@ func AppendInstructions(r *model.LLMRequest, instructions ...string) {
 	}
 
 	if r.Config.SystemInstruction == nil {
-		r.Config.SystemInstruction = genai.NewContentFromText(inst, genai.RoleUser)
+		//r.Config.SystemInstruction = genai.NewContentFromText(inst, genai.RoleUser)
 	} else {
 		r.Config.SystemInstruction.Parts = append(r.Config.SystemInstruction.Parts, genai.NewPartFromText(inst))
 	}

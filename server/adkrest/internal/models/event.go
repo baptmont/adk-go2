@@ -15,8 +15,6 @@
 package models
 
 import (
-	"time"
-
 	"google.golang.org/genai"
 
 	"google.golang.org/adk/model"
@@ -32,18 +30,20 @@ type EventActions struct {
 // Event represents a single event in a session.
 type Event struct {
 	ID                 string                   `json:"id"`
-	Time               int64                    `json:"time"`
 	InvocationID       string                   `json:"invocationId"`
-	Branch             string                   `json:"branch"`
+	Branch             string                   `json:"branch,omitempty"`
 	Author             string                   `json:"author"`
-	Partial            bool                     `json:"partial"`
-	LongRunningToolIDs []string                 `json:"longRunningToolIds"`
+	Partial            bool                     `json:"partial,omitempty"`
+	LongRunningToolIDs []string                 `json:"longRunningToolIds,omitempty"`
 	Content            *genai.Content           `json:"content"`
 	GroundingMetadata  *genai.GroundingMetadata `json:"groundingMetadata"`
-	TurnComplete       bool                     `json:"turnComplete"`
-	Interrupted        bool                     `json:"interrupted"`
-	ErrorCode          string                   `json:"errorCode"`
-	ErrorMessage       string                   `json:"errorMessage"`
+	UsageMetadata      *genai.GenerateContentResponseUsageMetadata `json:"usageMetadata"`
+	TurnComplete       bool                     `json:"turnComplete,omitempty"`
+	Interrupted        bool                     `json:"interrupted,omitempty"`
+	ErrorCode          string                   `json:"errorCode,omitempty"`
+	ErrorMessage       string                   `json:"errorMessage,omitempty"`
+	AvgLogprobs        float64                  `json:"avgLogprobs,omitempty"`
+	FinishReason       genai.FinishReason       `json:"finishReason,omitempty"`
 	Actions            EventActions             `json:"actions"`
 }
 
@@ -51,19 +51,21 @@ type Event struct {
 func ToSessionEvent(event Event) *session.Event {
 	return &session.Event{
 		ID:                 event.ID,
-		Timestamp:          time.Unix(event.Time, 0),
 		InvocationID:       event.InvocationID,
 		Branch:             event.Branch,
 		Author:             event.Author,
 		LongRunningToolIDs: event.LongRunningToolIDs,
 		LLMResponse: model.LLMResponse{
+			AvgLogprobs:       event.AvgLogprobs,
 			Content:           event.Content,
 			GroundingMetadata: event.GroundingMetadata,
+			UsageMetadata:     event.UsageMetadata,
 			Partial:           event.Partial,
 			TurnComplete:      event.TurnComplete,
 			Interrupted:       event.Interrupted,
 			ErrorCode:         event.ErrorCode,
 			ErrorMessage:      event.ErrorMessage,
+			FinishReason:      event.FinishReason,
 		},
 		Actions: session.EventActions{
 			StateDelta:    event.Actions.StateDelta,
@@ -76,18 +78,20 @@ func ToSessionEvent(event Event) *session.Event {
 func FromSessionEvent(event session.Event) Event {
 	return Event{
 		ID:                 event.ID,
-		Time:               event.Timestamp.Unix(),
 		InvocationID:       event.InvocationID,
 		Branch:             event.Branch,
 		Author:             event.Author,
 		Partial:            event.Partial,
 		LongRunningToolIDs: event.LongRunningToolIDs,
+		AvgLogprobs:        event.LLMResponse.AvgLogprobs,
 		Content:            event.LLMResponse.Content,
 		GroundingMetadata:  event.LLMResponse.GroundingMetadata,
+		UsageMetadata:      event.LLMResponse.UsageMetadata,
 		TurnComplete:       event.LLMResponse.TurnComplete,
 		Interrupted:        event.LLMResponse.Interrupted,
 		ErrorCode:          event.LLMResponse.ErrorCode,
 		ErrorMessage:       event.LLMResponse.ErrorMessage,
+		FinishReason:       event.LLMResponse.FinishReason,
 		Actions: EventActions{
 			StateDelta:    event.Actions.StateDelta,
 			ArtifactDelta: event.Actions.ArtifactDelta,

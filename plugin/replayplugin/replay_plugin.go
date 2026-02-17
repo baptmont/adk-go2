@@ -15,6 +15,7 @@
 package replayplugin
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -96,16 +97,18 @@ func (p *replayPlugin) beforeModel(ctx agent.CallbackContext, req *model.LLMRequ
 
 	invocationState, err := p.getInvocationState(ctx)
 	if err != nil {
+		fmt.Println("Replay state not initialized: %w", err)
 		return nil, err
 	}
 
 	agentName := ctx.AgentName()
 	recording, err := p.verifyAndGetNextLLMRecordingForAgent(invocationState, agentName, req)
 	if err != nil {
+		fmt.Println("Replay state not initialized: %w", err)
 		return nil, err
 	}
 
-	return recording.LlmResponse, nil
+	return recording.LlmResponse.ToLLMResponse(), nil
 }
 
 func (p *replayPlugin) beforeTool(ctx tool.Context, t tool.Tool, args map[string]any) (map[string]any, error) {
@@ -174,6 +177,8 @@ func (p *replayPlugin) isReplayModeOn(sessionState session.State) bool {
 		return false
 	}
 
+	fmt.Println("Replay mode is enabled")
+
 	return true
 }
 
@@ -240,6 +245,9 @@ func (p *replayPlugin) loadInvocationState(ctx agent.InvocationContext) (*Invoca
 	if err := yaml.Unmarshal(data, &recordings); err != nil {
 		return nil, fmt.Errorf("failed to parse recordings from %s: %w", recordingsPath, err)
 	}
+
+	jsonBytes, _ := json.MarshalIndent(recordings, "", "  ")
+	fmt.Printf("Recordings:\n%s\n", string(jsonBytes))
 
 	// 4. Create and Store State
 	state := NewInvocationReplayState(caseDir, msgIndex, &recordings)
