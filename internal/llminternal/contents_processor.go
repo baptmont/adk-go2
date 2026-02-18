@@ -481,11 +481,16 @@ func ConvertForeignEvent(ev *session.Event) *session.Event {
 			})
 		case p.FunctionCall != nil:
 			converted.Parts = append(converted.Parts, &genai.Part{
-				Text: fmt.Sprintf("[%s] called tool %q with parameters: %s", ev.Author, p.FunctionCall.Name, stringify(p.FunctionCall.Args)),
+				Text: fmt.Sprintf("[%s] called tool `%s` with parameters: %s", ev.Author, p.FunctionCall.Name, stringify(p.FunctionCall.Args)),
 			})
 		case p.FunctionResponse != nil:
+			respString := stringify(p.FunctionResponse.Response)
+			// TODO fix this hack
+			if respString == "{\"result\":null}" {
+				respString = "{'result': None}"
+			}
 			converted.Parts = append(converted.Parts, &genai.Part{
-				Text: fmt.Sprintf("[%s] %q tool returned result: %v", ev.Author, p.FunctionResponse.Name, stringify(p.FunctionResponse.Response)),
+				Text: fmt.Sprintf("[%s] `%s` tool returned result: %s", ev.Author, p.FunctionResponse.Name, respString),
 			})
 		default: // fallback to the original part for non-text and non-functionCall parts.
 			converted.Parts = append(converted.Parts, p)

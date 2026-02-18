@@ -105,6 +105,8 @@ type LLMAgentYAMLConfig struct {
 	Instruction string `yaml:"instruction"`
 
 	Tools []ToolConfig `yaml:"tools,omitempty"`
+
+	GenerateContentConfig *genai.GenerateContentConfig `yaml:"generate_content_config,omitempty"`
 }
 
 func (c *LLMAgentYAMLConfig) ToLLMAgentConfig(ctx context.Context) (*llmagent.Config, error) {
@@ -136,6 +138,7 @@ func (c *LLMAgentYAMLConfig) ToLLMAgentConfig(ctx context.Context) (*llmagent.Co
 		Model:       model,
 		Instruction: c.Instruction,
 		Tools:       tools,
+		GenerateContentConfig: c.GenerateContentConfig,
 	}, nil
 }
 

@@ -15,6 +15,8 @@
 package models
 
 import (
+	"encoding/json"
+
 	"google.golang.org/genai"
 
 	"google.golang.org/adk/model"
@@ -23,8 +25,10 @@ import (
 
 // EventActions represent a data model for session.EventActions
 type EventActions struct {
-	StateDelta    map[string]any   `json:"stateDelta"`
-	ArtifactDelta map[string]int64 `json:"artifactDelta"`
+	StateDelta        map[string]any   `json:"stateDelta"`
+	ArtifactDelta     map[string]int64 `json:"artifactDelta"`
+	Escalate          bool             `json:"escalate,omitempty"`
+	SkipSummarization bool             `json:"skip_summarization,omitempty"`
 }
 
 // Event represents a single event in a session.
@@ -68,8 +72,10 @@ func ToSessionEvent(event Event) *session.Event {
 			FinishReason:      event.FinishReason,
 		},
 		Actions: session.EventActions{
-			StateDelta:    event.Actions.StateDelta,
-			ArtifactDelta: event.Actions.ArtifactDelta,
+			StateDelta:        event.Actions.StateDelta,
+			ArtifactDelta:     event.Actions.ArtifactDelta,
+			Escalate:          event.Actions.Escalate,
+			SkipSummarization: event.Actions.SkipSummarization,
 		},
 	}
 }
@@ -93,8 +99,74 @@ func FromSessionEvent(event session.Event) Event {
 		ErrorMessage:       event.LLMResponse.ErrorMessage,
 		FinishReason:       event.LLMResponse.FinishReason,
 		Actions: EventActions{
-			StateDelta:    event.Actions.StateDelta,
-			ArtifactDelta: event.Actions.ArtifactDelta,
+			StateDelta:        event.Actions.StateDelta,
+			ArtifactDelta:     event.Actions.ArtifactDelta,
+			Escalate:          event.Actions.Escalate,
+			SkipSummarization: event.Actions.SkipSummarization,
 		},
 	}
+}
+
+func (e Event) MarshalJSON() ([]byte, error) {
+	// 1. Define Proxy structs to override specific JSON tags.
+	// These embed the original types to inherit all other fields automatically.
+
+	// ProxyFunctionCall overrides 'Args' to remove 'omitempty'.
+	type ProxyFunctionCall struct {
+		*genai.FunctionCall
+		Args map[string]any `json:"args"` // Tag changed: omitempty removed
+	}
+
+	// ProxyPart overrides 'FunctionCall' to use our ProxyFunctionCall.
+	type ProxyPart struct {
+		*genai.Part
+		FunctionCall *ProxyFunctionCall `json:"functionCall,omitempty"`
+	}
+
+	// ProxyContent overrides 'Parts' to use our ProxyPart.
+	type ProxyContent struct {
+		*genai.Content
+		Parts []*ProxyPart `json:"parts,omitempty"`
+	}
+
+	// 2. Create an Alias of Event to prevent infinite recursion during Marshal.
+	type EventAlias Event
+
+	// 3. Create a temporary struct that mimics Event but uses our ProxyContent.
+	aux := &struct {
+		EventAlias
+		Content *ProxyContent `json:"content"`
+	}{
+		EventAlias: EventAlias(e),
+	}
+
+	// 4. Manually reconstruct the Content hierarchy if it exists.
+	if e.Content != nil {
+		aux.Content = &ProxyContent{
+			Content: e.Content,
+			Parts:   make([]*ProxyPart, len(e.Content.Parts)),
+		}
+
+		for i, part := range e.Content.Parts {
+			// Wrap the original part
+			proxyPart := &ProxyPart{Part: part}
+
+			// If this part is a FunctionCall, wrap it to enforce Args visibility
+			if part.FunctionCall != nil {
+				// Ensure args is at least an empty map (not nil) so it marshals to {}
+				args := part.FunctionCall.Args
+				if args == nil {
+					args = make(map[string]any)
+				}
+
+				proxyPart.FunctionCall = &ProxyFunctionCall{
+					FunctionCall: part.FunctionCall,
+					Args:         args,
+				}
+			}
+			aux.Content.Parts[i] = proxyPart
+		}
+	}
+
+	return json.Marshal(aux)
 }

@@ -138,8 +138,13 @@ func AppendInstructions(r *model.LLMRequest, instructions ...string) {
 	}
 
 	if r.Config.SystemInstruction == nil {
-		//r.Config.SystemInstruction = genai.NewContentFromText(inst, genai.RoleUser)
-	} else {
-		r.Config.SystemInstruction.Parts = append(r.Config.SystemInstruction.Parts, genai.NewPartFromText(inst))
+		r.Config.SystemInstruction = genai.NewContentFromText(inst, genai.RoleUser)
+		return
 	}
+	// check if last part is text and if it is just modify it
+	if len(r.Config.SystemInstruction.Parts) > 0 && r.Config.SystemInstruction.Parts[len(r.Config.SystemInstruction.Parts)-1].Text != "" {
+		r.Config.SystemInstruction.Parts[len(r.Config.SystemInstruction.Parts)-1].Text += "\n\n" + inst
+		return
+	}
+	r.Config.SystemInstruction.Parts = append(r.Config.SystemInstruction.Parts, genai.NewPartFromText(inst))
 }

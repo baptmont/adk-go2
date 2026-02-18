@@ -16,7 +16,6 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"io/fs"
 	"log"
@@ -106,8 +105,6 @@ func main() {
 		BeforeModelCallback: func(ctx agent.CallbackContext, llmRequest *model.LLMRequest) (*model.LLMResponse, error) {
 			fmt.Printf("\n🤖 BeforeModelCallback for %s\n", ctx.AgentName())
 			fmt.Printf("🤖 %s , %s , %s\n", ctx.AppName(), ctx.UserID(), ctx.SessionID())
-			jsonBytes, _ := json.MarshalIndent(llmRequest.Contents, "", "  ")
-			fmt.Printf("🤖 %s\n", jsonBytes)
 			return nil, nil
 		},
 		AfterToolCallback: func(ctx tool.Context, tool tool.Tool, args, result map[string]any, err error) (map[string]any, error) {

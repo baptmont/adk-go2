@@ -97,14 +97,14 @@ func (p *replayPlugin) beforeModel(ctx agent.CallbackContext, req *model.LLMRequ
 
 	invocationState, err := p.getInvocationState(ctx)
 	if err != nil {
-		fmt.Println("Replay state not initialized: %w", err)
+		fmt.Println("Replay state not initialized1: %w", err)
 		return nil, err
 	}
 
 	agentName := ctx.AgentName()
 	recording, err := p.verifyAndGetNextLLMRecordingForAgent(invocationState, agentName, req)
 	if err != nil {
-		fmt.Println("Replay state not initialized: %w", err)
+		fmt.Println("Replay state not initialized2: %w", err)
 		return nil, err
 	}
 
@@ -231,18 +231,21 @@ func (p *replayPlugin) loadInvocationState(ctx agent.InvocationContext) (*Invoca
 
 	// Check if file exists
 	if _, err := os.Stat(recordingsPath); os.IsNotExist(err) {
+		fmt.Printf("Failed to read recordings file from %s: %v\n", recordingsPath, err)
 		return nil, fmt.Errorf("replay config error: recordings file not found: %s", recordingsPath)
 	}
 
 	// Read file
 	data, err := os.ReadFile(recordingsPath)
 	if err != nil {
+		fmt.Printf("Failed to read recordings file from %s: %v\n", recordingsPath, err)
 		return nil, fmt.Errorf("failed to read recordings file: %w", err)
 	}
 
 	// Parse YAML
 	var recordings recording.Recordings
 	if err := yaml.Unmarshal(data, &recordings); err != nil {
+		fmt.Printf("Failed to parse recordings from %s: %v\n", recordingsPath, err)
 		return nil, fmt.Errorf("failed to parse recordings from %s: %w", recordingsPath, err)
 	}
 
@@ -274,8 +277,12 @@ func getNextRecordingForAgent(state *InvocationReplayState, agentName string) (*
 		}
 	}
 
+	fmt.Printf("Here with index %d\n", currentAgentIndex)
+
 	// Check if we have enough recordings for this agent
 	if currentAgentIndex >= len(agentRecordings) {
+		//jsonBytes, _ := json.MarshalIndent(agentRecordings[currentAgentIndex-1], "", "  ")
+		//fmt.Printf("Agent recordings:\n%s\n", string(jsonBytes))
 		return nil, fmt.Errorf("Runtime sent more requests than expected for agent '%s' at user_message_index %d. Expected %d, but got request at index %d",
 			agentName, state.userMessageIndex, len(agentRecordings), currentAgentIndex)
 	}
@@ -304,7 +311,7 @@ func (p *replayPlugin) verifyAndGetNextLLMRecordingForAgent(state *InvocationRep
 	}
 
 	// Strict verification of LLM request
-	err = verifyLLMRequestMatch(expectedRecording.LLMRecording.LlmRequest, llmRequest, agentName, currentAgentIndex)
+	err = verifyLLMRequestMatch(expectedRecording.LLMRecording.LlmRequest.ToLLMRequest(), llmRequest, agentName, currentAgentIndex)
 	if err != nil {
 		return nil, err
 	}
@@ -315,6 +322,8 @@ func (p *replayPlugin) verifyAndGetNextLLMRecordingForAgent(state *InvocationRep
 func verifyLLMRequestMatch(expectedLLMRequest, actualLLMRequest *model.LLMRequest, agentName string, agentIndex int) error {
 	// Define options to ignore specific fields.
 	opts := []cmp.Option{
+		cmpopts.IgnoreFields(genai.FunctionDeclaration{}, "ParametersJsonSchema", "ResponseJsonSchema", "Parameters", "Response"),
+		cmpopts.IgnoreFields(model.LLMRequest{}, "Tools"),
 		cmpopts.IgnoreFields(genai.GenerateContentConfig{}, "Labels"),
 		cmpopts.EquateEmpty(),
 	}
@@ -344,7 +353,7 @@ func (p *replayPlugin) verifyAndGetNextToolRecordingForAgent(state *InvocationRe
 	}
 
 	// Strict verification of tool call
-	err = verifyToolCallMatch(expectedRecording.ToolRecording.ToolCall, t.Name(), args, agentName, currentAgentIndex)
+	err = verifyToolCallMatch(expectedRecording.ToolRecording.ToolCall.ToGenAI(), t.Name(), args, agentName, currentAgentIndex)
 	if err != nil {
 		return nil, err
 	}

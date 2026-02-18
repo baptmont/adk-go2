@@ -25,14 +25,88 @@ import (
 // LLMRecording represents a paired LLM request and response.
 type LLMRecording struct {
 	// Required. The LLM request.
-	LlmRequest *model.LLMRequest `yaml:"llm_request,omitempty"`
+	LlmRequest *LLMRequestRecording `yaml:"llm_request,omitempty"`
 
 	// Required. The LLM response.
 	LlmResponse *LLMResponseRecording `yaml:"llm_response,omitempty"`
 }
 
+type LLMRequestRecording struct {
+	Model    string `yaml:"model,omitempty"`
+	Contents []*genai.Content `yaml:"contents,omitempty"`
+	Config   *localGenerateContentConfig `yaml:"config,omitempty"`
+	Tools    map[string]any `yaml:"tools,omitempty"`
+}
+
+func (l *LLMRequestRecording) ToLLMRequest() *model.LLMRequest {
+	return &model.LLMRequest{
+		Model:    l.Model,
+		Contents: l.Contents,
+		Config:   l.Config.ToGenAI(),
+		Tools:    l.Tools,
+	}
+}
+
+type localGenerateContentConfig struct {
+	*genai.GenerateContentConfig 
+	SystemInstruction string `yaml:"system_instruction,omitempty"`
+	Temperature *float32 `yaml:"temperature,omitempty"`
+	Tools []*localTool `yaml:"tools,omitempty"`
+}
+
+func (l *localGenerateContentConfig) ToGenAI() *genai.GenerateContentConfig {
+	if l == nil {
+		return nil
+	}
+	out := l.GenerateContentConfig
+	if out == nil {
+		out = &genai.GenerateContentConfig{}
+	}
+	out.SystemInstruction = &genai.Content{Parts: []*genai.Part{{Text: l.SystemInstruction}}, Role: genai.RoleUser}
+	out.Temperature = l.Temperature
+	tools := make([]*genai.Tool, len(l.Tools))
+	for i, t := range l.Tools {
+		tools[i] = t.ToGenAI()
+	}
+	out.Tools = tools
+	return out
+}
+
+type localTool struct {
+	*genai.Tool
+	FunctionDeclarations []localFunctionDeclaration `yaml:"function_declarations,omitempty"`
+}
+
+func (l *localTool) ToGenAI() *genai.Tool {
+	if l == nil {
+		return nil
+	}
+	functionDeclarations := make([]*genai.FunctionDeclaration, len(l.FunctionDeclarations))
+	for i, fd := range l.FunctionDeclarations {
+		functionDeclarations[i] = fd.ToGenAI()
+	}
+	return &genai.Tool{
+		FunctionDeclarations: functionDeclarations,
+	}
+}
+
+type localFunctionDeclaration struct {
+	Name string `yaml:"name,omitempty"`
+	Description string `yaml:"description,omitempty"`
+}
+
+func (l *localFunctionDeclaration) ToGenAI() *genai.FunctionDeclaration {
+	if l == nil {
+		return nil
+	}
+	return &genai.FunctionDeclaration{
+		Name: l.Name,
+		Description: l.Description,
+	}
+}
+
 type LLMResponseRecording struct {
-	Content           *genai.Content `yaml:"content,omitempty"`
+	Content           *localContent `yaml:"content,omitempty"`
 	UsageMetadata     *localUsageMetadata `yaml:"usage_metadata,omitempty"`
 	LogprobsResult    *genai.LogprobsResult `yaml:"logprobs_result,omitempty"`
 	Partial           bool `yaml:"partial,omitempty"`
@@ -46,7 +120,7 @@ type LLMResponseRecording struct {
 
 func (l *LLMResponseRecording) ToLLMResponse() *model.LLMResponse {
 	return &model.LLMResponse{
-		Content:           l.Content,
+		Content:           l.Content.ToGenAI(),
 		UsageMetadata:     l.UsageMetadata.ToGenAI(),
 		LogprobsResult:    l.LogprobsResult,
 		Partial:           l.Partial,
@@ -122,10 +196,99 @@ type localModalityTokenCount struct {
 // ToolRecording represents a paired tool call and response.
 type ToolRecording struct {
 	// Required. The tool call.
-	ToolCall *genai.FunctionCall `yaml:"tool_call,omitempty"`
+	ToolCall *localFunctionCall `yaml:"tool_call,omitempty"`
 
 	// Required. The tool response.
-	ToolResponse *genai.FunctionResponse `yaml:"tool_response,omitempty"`
+	ToolResponse *localFunctionResponse `yaml:"tool_response,omitempty"`
+}
+
+type localContent struct {
+	Parts []*localPart `yaml:"parts,omitempty"`
+	Role string `yaml:"role,omitempty"`
+}
+
+func (l *localContent) ToGenAI() *genai.Content {
+	if l == nil {
+		return nil
+	}
+	return &genai.Content{
+		Parts: transformParts(l.Parts),
+		Role:  l.Role,
+	}
+}
+
+func transformParts(l []*localPart) []*genai.Part {
+	if l == nil {
+		return nil
+	}
+	var result []*genai.Part
+	for _, item := range l {
+		result = append(result, item.ToGenAI())
+	}
+	return result
+}
+
+type localPart struct {
+	*genai.Part
+	Text string `yaml:"text,omitempty"`
+	FunctionCall *localFunctionCall `yaml:"function_call,omitempty"`
+	FunctionResponse *localFunctionResponse `yaml:"function_response,omitempty"`	
+}
+
+func (l *localPart) ToGenAI() *genai.Part {
+	if l == nil {
+		return nil
+	}
+	out := l.Part
+	if out == nil {
+		out = &genai.Part{}
+	}
+	out.Text = l.Text
+	out.FunctionCall = l.FunctionCall.ToGenAI()
+	out.FunctionResponse = l.FunctionResponse.ToGenAI()
+	return out
+}
+
+type localFunctionCall struct {
+	*genai.FunctionCall
+	ID string `yaml:"id,omitempty"`
+	Args map[string]any `yaml:"args,omitempty"`
+	Name string `yaml:"name,omitempty"`
+}
+
+func (l *localFunctionCall) ToGenAI() *genai.FunctionCall {
+	if l == nil {
+		return nil
+	}
+	out := l.FunctionCall
+	if out == nil {
+		out = &genai.FunctionCall{}
+	}
+	out.ID = l.ID
+	out.Args = l.Args
+	out.Name = l.Name
+	return out
+}
+
+type localFunctionResponse struct {
+	*genai.FunctionResponse
+	ID string `yaml:"id,omitempty"`
+	Name string `yaml:"name,omitempty"`
+	Response map[string]any `yaml:"response,omitempty"`
+}
+
+func (l *localFunctionResponse) ToGenAI() *genai.FunctionResponse {
+	if l == nil {
+		return nil
+	}	
+	out := l.FunctionResponse
+	if out == nil {
+		out = &genai.FunctionResponse{}
+	}
+	out.ID = l.ID
+	out.Name = l.Name
+	out.Response = l.Response
+	return out
 }
 
 // Recording represents a single interaction recording, ordered by request timestamp.

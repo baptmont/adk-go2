@@ -83,6 +83,7 @@ func (c *SessionsAPIController) createSession(ctx context.Context, sessionID mod
 
 // DeleteSession handles deleting a specific session.
 func (c *SessionsAPIController) DeleteSessionHandler(rw http.ResponseWriter, req *http.Request) {
+	return
 	params := mux.Vars(req)
 	sessionID, err := models.SessionIDFromHTTPParameters(params)
 	if err != nil {
