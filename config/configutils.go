@@ -40,10 +40,11 @@ type AgentFactory func(ctx context.Context, configBytes []byte, configPath strin
 type ToolFactory func(ctx context.Context, args map[string]any) (tool.Tool, error)
 
 var (
-	registryMu    sync.RWMutex
-	registry      = make(map[string]AgentFactory)
-	agentRegistry = make(map[string]agent.Agent)
-	toolRegistry  = make(map[string]ToolFactory)
+	registryMu       sync.RWMutex
+	registry         = make(map[string]AgentFactory)
+	agentRegistry    = make(map[string]agent.Agent)
+	toolRegistry     = make(map[string]ToolFactory)
+	callbackRegistry = make(map[string]any)
 )
 
 func init() {
@@ -105,6 +106,16 @@ func RegisterTool(name string, factory ToolFactory) error {
 	return nil
 }
 
+func RegisterCallback(name string, callback any) error {
+	registryMu.Lock()
+	defer registryMu.Unlock()
+	if _, dup := callbackRegistry[name]; dup {
+		return fmt.Errorf("RegisterCallback called twice for callback %s", name)
+	}
+	callbackRegistry[name] = callback
+	return nil
+}
+
 // FromConfig builds an agent from a config file path.
 // Equivalent to: def from_config(config_path: str) -> BaseAgent
 func FromConfig(ctx context.Context, configPath string) (agent.Agent, error) {
@@ -160,6 +171,20 @@ func ResolveToolReference(ctx context.Context, toolName string, args map[string]
 	}
 	registryMu.RUnlock()
 	return nil, fmt.Errorf("tool '%s' not found", toolName)
+}
+
+func ResolveCallbackReference(ctx context.Context, callbackName string) (any, error) {
+	if callbackName == "" {
+		return nil, fmt.Errorf("callback name cannot be empty")
+	}
+
+	registryMu.RLock()
+	if c, ok := callbackRegistry[callbackName]; ok {
+		registryMu.RUnlock()
+		return c, nil
+	}
+	registryMu.RUnlock()
+	return nil, fmt.Errorf("callback '%s' not found", callbackName)
 }
 
 // ResolveAgentReference builds an agent from a reference config.

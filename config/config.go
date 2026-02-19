@@ -131,6 +131,16 @@ func (c *LLMAgentYAMLConfig) ToLLMAgentConfig(ctx context.Context) (*llmagent.Co
 		return nil, err
 	}
 
+	beforeCallbacks, err := resolveCallbacks[agent.BeforeAgentCallback](ctx, c.BeforeAgentCallbacks)
+	if err != nil {
+		return nil, err
+	}
+
+	afterCallbacks, err := resolveCallbacks[agent.AfterAgentCallback](ctx, c.AfterAgentCallbacks)
+	if err != nil {
+		return nil, err
+	}
+
 	return &llmagent.Config{
 		Name:        c.Name,
 		Description: c.Description,
@@ -139,6 +149,8 @@ func (c *LLMAgentYAMLConfig) ToLLMAgentConfig(ctx context.Context) (*llmagent.Co
 		Instruction: c.Instruction,
 		Tools:       tools,
 		GenerateContentConfig: c.GenerateContentConfig,
+		BeforeAgentCallbacks: beforeCallbacks,
+		AfterAgentCallbacks:  afterCallbacks,
 	}, nil
 }
 
@@ -232,4 +244,22 @@ func resolveTools(ctx context.Context, parentPath string, toolConfigs []ToolConf
 		}
 	}
 	return tools, nil
+}
+
+func resolveCallbacks[T any](ctx context.Context, callbacks []CodeConfig) ([]T, error) {
+	var cbs []T
+	for _, ref := range callbacks {
+		if ref.Name != "" {
+			c, err := ResolveCallbackReference(ctx, ref.Name)
+			if err != nil {
+				return nil, fmt.Errorf("failed to resolve callback reference %s: %w", ref.Name, err)
+			}
+			cb, ok := c.(T)
+			if !ok {
+				return nil, fmt.Errorf("callback %s is of type %T and not %T", ref.Name, c, *new(T))
+			}
+			cbs = append(cbs, cb)
+		}
+	}
+	return cbs, nil
 }

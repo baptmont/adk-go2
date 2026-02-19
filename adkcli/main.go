@@ -42,6 +42,9 @@ func main() {
 		log.Fatalf("Error getting current directory: %v", err)
 	}
 
+	// Register callbacks for the conformance agents
+	RegisterCallbacks()
+
 	fmt.Printf("🔍 Scanning for 'root_agent.yaml' in: %s\n", cwd)
 
 	// 2. Crawl folder structure to find all configs
