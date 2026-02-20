@@ -28,7 +28,8 @@ type EventActions struct {
 	StateDelta        map[string]any   `json:"stateDelta"`
 	ArtifactDelta     map[string]int64 `json:"artifactDelta"`
 	Escalate          bool             `json:"escalate,omitempty"`
-	SkipSummarization bool             `json:"skip_summarization,omitempty"`
+	SkipSummarization bool             `json:"skipSummarization,omitempty"`
+	TransferToAgent   string           `json:"transferToAgent,omitempty"`
 }
 
 // Event represents a single event in a session.
@@ -48,6 +49,7 @@ type Event struct {
 	ErrorMessage       string                   `json:"errorMessage,omitempty"`
 	AvgLogprobs        float64                  `json:"avgLogprobs,omitempty"`
 	FinishReason       genai.FinishReason       `json:"finishReason,omitempty"`
+	ModelVersion       string                   `json:"modelVersion,omitempty"`
 	Actions            EventActions             `json:"actions"`
 }
 
@@ -70,12 +72,14 @@ func ToSessionEvent(event Event) *session.Event {
 			ErrorCode:         event.ErrorCode,
 			ErrorMessage:      event.ErrorMessage,
 			FinishReason:      event.FinishReason,
+			ModelVersion:      event.ModelVersion,
 		},
 		Actions: session.EventActions{
 			StateDelta:        event.Actions.StateDelta,
 			ArtifactDelta:     event.Actions.ArtifactDelta,
 			Escalate:          event.Actions.Escalate,
 			SkipSummarization: event.Actions.SkipSummarization,
+			TransferToAgent:   event.Actions.TransferToAgent,
 		},
 	}
 }
@@ -98,11 +102,13 @@ func FromSessionEvent(event session.Event) Event {
 		ErrorCode:          event.LLMResponse.ErrorCode,
 		ErrorMessage:       event.LLMResponse.ErrorMessage,
 		FinishReason:       event.LLMResponse.FinishReason,
+		ModelVersion:       event.LLMResponse.ModelVersion,
 		Actions: EventActions{
 			StateDelta:        event.Actions.StateDelta,
 			ArtifactDelta:     event.Actions.ArtifactDelta,
 			Escalate:          event.Actions.Escalate,
 			SkipSummarization: event.Actions.SkipSummarization,
+			TransferToAgent:   event.Actions.TransferToAgent,
 		},
 	}
 }

@@ -33,7 +33,7 @@ type LLMRecording struct {
 
 type LLMRequestRecording struct {
 	Model    string `yaml:"model,omitempty"`
-	Contents []*genai.Content `yaml:"contents,omitempty"`
+	Contents []*localContent `yaml:"contents,omitempty"`
 	Config   *localGenerateContentConfig `yaml:"config,omitempty"`
 	Tools    map[string]any `yaml:"tools,omitempty"`
 }
@@ -41,7 +41,7 @@ type LLMRequestRecording struct {
 func (l *LLMRequestRecording) ToLLMRequest() *model.LLMRequest {
 	return &model.LLMRequest{
 		Model:    l.Model,
-		Contents: l.Contents,
+		Contents: transformContents(l.Contents),
 		Config:   l.Config.ToGenAI(),
 		Tools:    l.Tools,
 	}
@@ -116,6 +116,7 @@ type LLMResponseRecording struct {
 	ErrorMessage      string `yaml:"error_message,omitempty"`
 	FinishReason      genai.FinishReason `yaml:"finish_reason,omitempty"`
 	AvgLogprobs       float64 `yaml:"avg_logprobs,omitempty"`
+	ModelVersion      string `yaml:"model_version,omitempty"`
 }
 
 func (l *LLMResponseRecording) ToLLMResponse() *model.LLMResponse {
@@ -130,6 +131,7 @@ func (l *LLMResponseRecording) ToLLMResponse() *model.LLMResponse {
 		ErrorMessage:      l.ErrorMessage,
 		FinishReason:      l.FinishReason,
 		AvgLogprobs:       l.AvgLogprobs,
+		ModelVersion:      l.ModelVersion,
 	}
 }
 
@@ -205,6 +207,17 @@ type ToolRecording struct {
 type localContent struct {
 	Parts []*localPart `yaml:"parts,omitempty"`
 	Role string `yaml:"role,omitempty"`
+}
+
+func transformContents(l []*localContent) []*genai.Content {
+	if l == nil {
+		return nil
+	}
+	var result []*genai.Content
+	for _, item := range l {
+		result = append(result, item.ToGenAI())
+	}
+	return result
 }
 
 func (l *localContent) ToGenAI() *genai.Content {

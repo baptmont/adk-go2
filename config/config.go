@@ -106,6 +106,10 @@ type LLMAgentYAMLConfig struct {
 
 	Tools []ToolConfig `yaml:"tools,omitempty"`
 
+	DisallowTransferToPeers bool `yaml:"disallow_transfer_to_peers,omitempty"`
+
+	DisallowTransferToParent bool `yaml:"disallow_transfer_to_parent,omitempty"`
+
 	GenerateContentConfig *genai.GenerateContentConfig `yaml:"generate_content_config,omitempty"`
 }
 
@@ -142,15 +146,17 @@ func (c *LLMAgentYAMLConfig) ToLLMAgentConfig(ctx context.Context) (*llmagent.Co
 	}
 
 	return &llmagent.Config{
-		Name:        c.Name,
-		Description: c.Description,
-		SubAgents:   subAgents,
-		Model:       model,
-		Instruction: c.Instruction,
-		Tools:       tools,
-		GenerateContentConfig: c.GenerateContentConfig,
-		BeforeAgentCallbacks: beforeCallbacks,
-		AfterAgentCallbacks:  afterCallbacks,
+		Name:                     c.Name,
+		Description:              c.Description,
+		SubAgents:                subAgents,
+		Model:                    model,
+		Instruction:              c.Instruction,
+		DisallowTransferToPeers:  c.DisallowTransferToPeers,
+		DisallowTransferToParent: c.DisallowTransferToParent,
+		Tools:                    tools,
+		GenerateContentConfig:    c.GenerateContentConfig,
+		BeforeAgentCallbacks:     beforeCallbacks,
+		AfterAgentCallbacks:      afterCallbacks,
 	}, nil
 }
 

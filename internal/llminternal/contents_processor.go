@@ -484,13 +484,8 @@ func ConvertForeignEvent(ev *session.Event) *session.Event {
 				Text: fmt.Sprintf("[%s] called tool `%s` with parameters: %s", ev.Author, p.FunctionCall.Name, stringify(p.FunctionCall.Args)),
 			})
 		case p.FunctionResponse != nil:
-			respString := stringify(p.FunctionResponse.Response)
-			// TODO fix this hack
-			if respString == "{\"result\":null}" {
-				respString = "{'result': None}"
-			}
 			converted.Parts = append(converted.Parts, &genai.Part{
-				Text: fmt.Sprintf("[%s] `%s` tool returned result: %s", ev.Author, p.FunctionResponse.Name, respString),
+				Text: fmt.Sprintf("[%s] `%s` tool returned result: %s", ev.Author, p.FunctionResponse.Name, stringify(p.FunctionResponse.Response)),
 			})
 		default: // fallback to the original part for non-text and non-functionCall parts.
 			converted.Parts = append(converted.Parts, p)
@@ -506,8 +501,24 @@ func ConvertForeignEvent(ev *session.Event) *session.Event {
 }
 
 func stringify(v any) string {
-	s, _ := json.Marshal(v)
-	return string(s)
+    b, _ := json.Marshal(v)
+    s := string(b)
+
+    // Add the space after colons: {"a":"b"} -> {"a": "b"}
+    s = strings.ReplaceAll(s, "\":", "\": ")
+
+    // Add the space after commas: {"a": "b","c": "d"} -> {"a": "b", "c": "d"}
+    s = strings.ReplaceAll(s, ",", ", ")
+
+    // Swap double quotes for single quotes
+    s = strings.ReplaceAll(s, "\"", "'")
+
+    // Handle the Python-isms for conformance with Python code.
+    s = strings.ReplaceAll(s, "null", "None")
+    s = strings.ReplaceAll(s, "true", "True")
+    s = strings.ReplaceAll(s, "false", "False")
+
+    return s
 }
 
 // requestEUCFunctionCallName is a special function to handle credential
