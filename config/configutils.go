@@ -17,6 +17,7 @@ package config
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -31,6 +32,7 @@ import (
 	"google.golang.org/adk/agent/workflowagents/sequentialagent"
 	"google.golang.org/adk/tool"
 	"google.golang.org/adk/tool/agenttool"
+	"google.golang.org/adk/tool/exampletool"
 	"google.golang.org/adk/tool/exitlooptool"
 	"google.golang.org/adk/tool/geminitool"
 )
@@ -58,6 +60,12 @@ func init() {
 	RegisterTool("google_search", func(ctx context.Context, _ map[string]any) (tool.Tool, error) {
 		return geminitool.GoogleSearch{}, nil
 	})
+	RegisterTool("url_context", func(ctx context.Context, _ map[string]any) (tool.Tool, error) {
+		return geminitool.URLContext{}, nil
+	})
+	RegisterTool("google_maps_grounding", func(ctx context.Context, _ map[string]any) (tool.Tool, error) {
+		return geminitool.GoogleMaps{}, nil
+	})
 	RegisterTool("AgentTool", func(ctx context.Context, args map[string]any) (tool.Tool, error) {
 		if args == nil {
 			return nil, fmt.Errorf("args is nil")
@@ -80,6 +88,63 @@ func init() {
 		} else {
 			return nil, fmt.Errorf("config_path not found in args")
 		}
+	})
+	RegisterTool("LongRunningFunctionTool", func(ctx context.Context, args map[string]any) (tool.Tool, error) {
+		if args == nil {
+			return nil, fmt.Errorf("args is nil")
+		}
+		funcName,ok := args["func"].(string)
+		if !ok {
+			return nil, fmt.Errorf("func not found in args")
+		}
+		return ResolveToolReference(ctx, funcName, args)
+	})
+	RegisterTool("ExampleTool", func(ctx context.Context, args map[string]any) (tool.Tool, error) {
+    if args == nil {
+			return nil, fmt.Errorf("args is nil")
+    }
+
+    raw, ok := args["examples"]
+    if !ok {
+			return nil, fmt.Errorf("examples not found in args")
+    }
+
+    // 1. Cast the top-level 'examples' to a generic slice
+    examplesSlice, ok := raw.([]any)
+    if !ok {
+			return nil, fmt.Errorf("examples is not a list")
+    }
+
+    // 2. Iterate and normalize the 'output' field
+    for i, item := range examplesSlice {
+			m, ok := item.(map[string]any)
+			if !ok {
+				continue
+			}
+
+			output := m["output"]
+			if output == nil {
+				continue
+			}
+
+			// Check if 'output' is NOT a slice. If it's a single object, 
+			// wrap it in a new slice []any{output}
+			if _, isSlice := output.([]any); !isSlice {
+				m["output"] = []any{output}
+				examplesSlice[i] = m
+			}
+    }
+
+    // 3. Now marshal/unmarshal as usual into your clean struct
+    bytes, _ := json.Marshal(examplesSlice)
+    var examples []*exampletool.Example
+    if err := json.Unmarshal(bytes, &examples); err != nil {
+			return nil, fmt.Errorf("failed to decode normalized examples: %w", err)
+    }
+
+    return exampletool.New(exampletool.ExampleToolConfig{
+			Examples: examples,
+    })
 	})
 }
 

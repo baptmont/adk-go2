@@ -73,8 +73,11 @@ func (l *localGenerateContentConfig) ToGenAI() *genai.GenerateContentConfig {
 }
 
 type localTool struct {
-	*genai.Tool
+	*genai.Tool 
 	FunctionDeclarations []localFunctionDeclaration `yaml:"function_declarations,omitempty"`
+	GoogleSearch *genai.GoogleSearch `yaml:"google_search,omitempty"`
+	GoogleMaps *genai.GoogleMaps `yaml:"google_maps,omitempty"`
+	URLContext *genai.URLContext `yaml:"url_context,omitempty"`
 }
 
 func (l *localTool) ToGenAI() *genai.Tool {
@@ -85,9 +88,15 @@ func (l *localTool) ToGenAI() *genai.Tool {
 	for i, fd := range l.FunctionDeclarations {
 		functionDeclarations[i] = fd.ToGenAI()
 	}
-	return &genai.Tool{
-		FunctionDeclarations: functionDeclarations,
+	tool := l.Tool
+	if tool == nil {
+		tool = &genai.Tool{}
 	}
+	tool.FunctionDeclarations = functionDeclarations
+	tool.GoogleSearch = l.GoogleSearch
+	tool.GoogleMaps = l.GoogleMaps
+	tool.URLContext = l.URLContext
+	return tool
 }
 
 type localFunctionDeclaration struct {
@@ -107,6 +116,7 @@ func (l *localFunctionDeclaration) ToGenAI() *genai.FunctionDeclaration {
 
 type LLMResponseRecording struct {
 	Content           *localContent `yaml:"content,omitempty"`
+	GroundingMetadata *localGroundingMetadata `yaml:"grounding_metadata,omitempty"`
 	UsageMetadata     *localUsageMetadata `yaml:"usage_metadata,omitempty"`
 	LogprobsResult    *genai.LogprobsResult `yaml:"logprobs_result,omitempty"`
 	Partial           bool `yaml:"partial,omitempty"`
@@ -122,6 +132,7 @@ type LLMResponseRecording struct {
 func (l *LLMResponseRecording) ToLLMResponse() *model.LLMResponse {
 	return &model.LLMResponse{
 		Content:           l.Content.ToGenAI(),
+		GroundingMetadata: l.GroundingMetadata.ToGenAI(),
 		UsageMetadata:     l.UsageMetadata.ToGenAI(),
 		LogprobsResult:    l.LogprobsResult,
 		Partial:           l.Partial,
@@ -194,6 +205,169 @@ type localModalityTokenCount struct {
     Modality genai.MediaModality `yaml:"modality,omitempty"`
     TokenCount int32 `yaml:"token_count,omitempty"`
 }
+
+type localGroundingMetadata struct {
+	GoogleMapsWidgetContextToken string `yaml:"google_maps_widget_context_token,omitempty"`
+	GroundingChunks []*localGroundingChunk `yaml:"grounding_chunks,omitempty"`
+	GroundingSupports []*localGroundingSupport `yaml:"grounding_supports,omitempty"`
+	RetrievalMetadata *localRetrievalMetadata `yaml:"retrieval_metadata,omitempty"`
+	RetrievalQueries []string `yaml:"retrieval_queries,omitempty"`
+	SearchEntryPoint *localSearchEntryPoint `yaml:"search_entry_point,omitempty"`
+	WebSearchQueries []string `yaml:"web_search_queries,omitempty"`
+}
+
+func (l *localGroundingMetadata) ToGenAI() *genai.GroundingMetadata {
+	if l == nil {
+		return nil
+	}
+	return &genai.GroundingMetadata{
+		GoogleMapsWidgetContextToken: l.GoogleMapsWidgetContextToken,
+		GroundingChunks: transformGroundingChunks(l.GroundingChunks),
+		GroundingSupports: transformGroundingSupports(l.GroundingSupports),
+		RetrievalMetadata: l.RetrievalMetadata.ToGenAI(),
+		RetrievalQueries: l.RetrievalQueries,
+		SearchEntryPoint: l.SearchEntryPoint.ToGenAI(),
+		WebSearchQueries: l.WebSearchQueries,
+	}
+}
+
+type localGroundingChunk struct {
+	Web *localGroundingChunkWeb `yaml:"web,omitempty"`
+	GoogleMaps *localGroundingChunkGoogleMaps `yaml:"maps,omitempty"`
+}
+
+func transformGroundingChunks(l []*localGroundingChunk) []*genai.GroundingChunk {
+	if l == nil {
+		return nil
+	}
+	var result []*genai.GroundingChunk
+	for _, item := range l {
+		result = append(result, item.ToGenAI())
+	}
+	return result
+}
+
+func (l *localGroundingChunk) ToGenAI() *genai.GroundingChunk {
+	if l == nil {
+		return nil
+	}
+	return &genai.GroundingChunk{
+		Web: l.Web.ToGenAI(),
+		Maps: l.GoogleMaps.ToGenAI(),
+	}
+}
+
+type localGroundingChunkWeb struct {
+	Domain string `yaml:"domain,omitempty"`
+	Title string `yaml:"title,omitempty"`
+	URI string `yaml:"uri,omitempty"`
+}
+
+func (l *localGroundingChunkWeb) ToGenAI() *genai.GroundingChunkWeb {
+	if l == nil {
+		return nil
+	}
+	return &genai.GroundingChunkWeb{
+		Domain: l.Domain,
+		Title: l.Title,
+		URI: l.URI,
+	}
+}
+
+type localGroundingChunkGoogleMaps struct {
+	PlaceID string `yaml:"place_id,omitempty"`
+	Text string `yaml:"text,omitempty"`
+	Title string `yaml:"title,omitempty"`
+	URI string `yaml:"uri,omitempty"`
+}
+
+func (l *localGroundingChunkGoogleMaps) ToGenAI() *genai.GroundingChunkMaps {
+	if l == nil {
+		return nil
+	}
+	return &genai.GroundingChunkMaps{
+		PlaceID: l.PlaceID,
+		Text: l.Text,
+		Title: l.Title,
+		URI: l.URI,
+	}
+}
+
+type localGroundingSupport struct {
+	ConfidenceScores []float32 `yaml:"confidence_scores,omitempty"`
+	GroundingChunkIndices []int32 `yaml:"grounding_chunk_indices,omitempty"`
+	Segment *localSegment `yaml:"segment,omitempty"`
+}
+
+func transformGroundingSupports(l []*localGroundingSupport) []*genai.GroundingSupport {
+	if l == nil {
+		return nil
+	}
+	var result []*genai.GroundingSupport
+	for _, item := range l {
+		result = append(result, item.ToGenAI())
+	}
+	return result
+}
+
+func (l *localGroundingSupport) ToGenAI() *genai.GroundingSupport {
+	if l == nil {
+		return nil
+	}
+	return &genai.GroundingSupport{
+		ConfidenceScores: l.ConfidenceScores,
+		GroundingChunkIndices: l.GroundingChunkIndices,
+		Segment: l.Segment.ToGenAI(),
+	}
+}
+
+type localSegment struct {
+	EndIndex int32 `yaml:"end_index,omitempty"`
+	PartIndex int32 `yaml:"part_index,omitempty"`
+	StartIndex int32 `yaml:"start_index,omitempty"`
+	Text string `yaml:"text,omitempty"`
+}
+
+func (l *localSegment) ToGenAI() *genai.Segment {
+	if l == nil {
+		return nil
+	}
+	return &genai.Segment{
+		EndIndex: l.EndIndex,
+		PartIndex: l.PartIndex,
+		StartIndex: l.StartIndex,
+		Text: l.Text,
+	}
+}
+
+type localRetrievalMetadata struct {
+	GoogleSearchDynamicRetrievalScore float32 `yaml:"google_search_dynamic_retrieval_score,omitempty"`
+}
+
+func (l *localRetrievalMetadata) ToGenAI() *genai.RetrievalMetadata {
+	if l == nil {
+		return nil
+	}
+	return &genai.RetrievalMetadata{
+		GoogleSearchDynamicRetrievalScore: l.GoogleSearchDynamicRetrievalScore,
+	}
+}
+
+type localSearchEntryPoint struct {
+	RenderedContent string `yaml:"rendered_content,omitempty"`
+	SDKBlob []byte `yaml:"sdk_blob,omitempty"`
+}
+
+func (l *localSearchEntryPoint) ToGenAI() *genai.SearchEntryPoint {
+	if l == nil {
+		return nil
+	}
+	return &genai.SearchEntryPoint{
+		RenderedContent: l.RenderedContent,
+		SDKBlob: l.SDKBlob,
+	}
+}
+
 
 // ToolRecording represents a paired tool call and response.
 type ToolRecording struct {
