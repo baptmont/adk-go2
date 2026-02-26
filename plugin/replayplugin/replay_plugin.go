@@ -15,12 +15,12 @@
 package replayplugin
 
 import (
-	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
@@ -249,8 +249,17 @@ func (p *replayPlugin) loadInvocationState(ctx agent.InvocationContext) (*Invoca
 		return nil, fmt.Errorf("failed to parse recordings from %s: %w", recordingsPath, err)
 	}
 
-	jsonBytes, _ := json.MarshalIndent(recordings, "", "  ")
-	fmt.Printf("Recordings:\n%s\n", string(jsonBytes))
+	// Add index to each recording, based on user message index. Used for parallel execution sync.
+	index := 0
+	prevMessageId := 0
+	for i := range recordings.Recordings {
+		if prevMessageId != recordings.Recordings[i].UserMessageIndex {
+			prevMessageId = recordings.Recordings[i].UserMessageIndex
+			index = 0
+		}
+		recordings.Recordings[i].Index = index
+		index++
+	}
 
 	// 4. Create and Store State
 	state := NewInvocationReplayState(caseDir, msgIndex, &recordings)
@@ -264,7 +273,7 @@ func (p *replayPlugin) loadInvocationState(ctx agent.InvocationContext) (*Invoca
 
 func getNextRecordingForAgent(state *InvocationReplayState, agentName string) (*recording.Recording, error) {
 	// Get current agent index
-	currentAgentIndex, ok := state.agentReplayIndices[agentName]
+	currentAgentIndex, ok := state.GetAgentReplayIndex(agentName)
 	if !ok {
 		currentAgentIndex = 0
 	}
@@ -290,14 +299,25 @@ func getNextRecordingForAgent(state *InvocationReplayState, agentName string) (*
 	// Get the expected recording
 	expectedRecording := agentRecordings[currentAgentIndex]
 
-	// Advance agent index
-	state.agentReplayIndices[agentName] = currentAgentIndex + 1
+	// Wait for the current index to match the expected index
+	// This ensures that we process recordings in the expected order, even if agents are executing in parallel
+	state.mu.Lock()
+	for state.curIndex != expectedRecording.Index {
+		state.cond.Wait()
+		time.Sleep(1 * time.Second)
+	}
+	
+	state.agentReplayIndices[agentName]++
+	state.curIndex++
+
+	state.mu.Unlock()
+	state.cond.Broadcast()
 
 	return expectedRecording, nil
 }
 
 func (p *replayPlugin) verifyAndGetNextLLMRecordingForAgent(state *InvocationReplayState, agentName string, llmRequest *model.LLMRequest) (*recording.LLMRecording, error) {
-	currentAgentIndex, ok := state.agentReplayIndices[agentName]
+	currentAgentIndex, ok := state.GetAgentReplayIndex(agentName)
 	if !ok {
 		currentAgentIndex = 0
 	}
@@ -339,7 +359,7 @@ func verifyLLMRequestMatch(expectedLLMRequest, actualLLMRequest *model.LLMReques
 }
 
 func (p *replayPlugin) verifyAndGetNextToolRecordingForAgent(state *InvocationReplayState, agentName string, t tool.Tool, args map[string]any) (*recording.ToolRecording, error) {
-	currentAgentIndex, ok := state.agentReplayIndices[agentName]
+	currentAgentIndex, ok := state.GetAgentReplayIndex(agentName)
 	if !ok {
 		currentAgentIndex = 0
 	}

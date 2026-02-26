@@ -14,7 +14,11 @@
 
 package replayplugin
 
-import "google.golang.org/adk/plugin/replayplugin/recording"
+import (
+	"sync"
+
+	"google.golang.org/adk/plugin/replayplugin/recording"
+)
 
 // InvocationReplayState tracks per-invocation replay state to isolate concurrent runs.
 type InvocationReplayState struct {
@@ -25,16 +29,24 @@ type InvocationReplayState struct {
 	// Per-agent replay indices for parallel execution
 	// key: agent_name -> current replay index for that agent
 	agentReplayIndices map[string]int
+
+	curIndex int
+	mu       sync.Mutex
+	cond     *sync.Cond
 }
 
 // NewInvocationReplayState behaves as the constructor.
 func NewInvocationReplayState(testCasePath string, userMessageIndex int, recs *recording.Recordings) *InvocationReplayState {
-	return &InvocationReplayState{
+	state := &InvocationReplayState{
 		testCasePath:       testCasePath,
 		userMessageIndex:   userMessageIndex,
 		recordings:         recs,
 		agentReplayIndices: make(map[string]int),
+		curIndex:           0,
+		mu:                 sync.Mutex{},
 	}
+	state.cond = sync.NewCond(&state.mu)
+	return state
 }
 
 // GetTestCasePath returns the test case path.
@@ -55,16 +67,23 @@ func (s *InvocationReplayState) GetRecordings() *recording.Recordings {
 // GetAgentReplayIndex returns the index for the agent.
 // In Go, looking up a missing key returns the zero value (0),
 // so getOrDefault is intrinsic to the language for integers.
-func (s *InvocationReplayState) GetAgentReplayIndex(agentName string) int {
-	return s.agentReplayIndices[agentName]
-}
-
-// SetAgentReplayIndex sets the replay index for a specific agent.
-func (s *InvocationReplayState) SetAgentReplayIndex(agentName string, index int) {
-	s.agentReplayIndices[agentName] = index
+func (s *InvocationReplayState) GetAgentReplayIndex(agentName string) (int, bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	val, ok := s.agentReplayIndices[agentName]
+	return val, ok
 }
 
 // IncrementAgentReplayIndex increments the replay index for a specific agent.
 func (s *InvocationReplayState) IncrementAgentReplayIndex(agentName string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	s.agentReplayIndices[agentName]++
+}
+
+// IncrementCurrentIndex increments the current index.
+func (s *InvocationReplayState) IncrementCurrentIndex() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.curIndex++
 }

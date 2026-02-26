@@ -495,6 +495,9 @@ type Recording struct {
 	ToolRecording *ToolRecording `yaml:"tool_recording,omitempty"`
 
 	// oneof fields - end
+
+	// Index of the recording in the recordings list (0-based).
+	Index int `yaml:"-"`
 }
 
 // Recordings represents all recordings in chronological order.
