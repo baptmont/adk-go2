@@ -130,7 +130,7 @@ func (c *LLMAgentYAMLConfig) ToLLMAgentConfig(ctx context.Context) (*llmagent.Co
 		return nil, err
 	}
 
-	tools, err := resolveTools(ctx, c.ConfigPath, c.Tools)
+	tools, toolsets, err := resolveTools(ctx, c.ConfigPath, c.Tools)
 	if err != nil {
 		return nil, err
 	}
@@ -154,6 +154,7 @@ func (c *LLMAgentYAMLConfig) ToLLMAgentConfig(ctx context.Context) (*llmagent.Co
 		DisallowTransferToPeers:  c.DisallowTransferToPeers,
 		DisallowTransferToParent: c.DisallowTransferToParent,
 		Tools:                    tools,
+		Toolsets:                 toolsets,
 		GenerateContentConfig:    c.GenerateContentConfig,
 		BeforeAgentCallbacks:     beforeCallbacks,
 		AfterAgentCallbacks:      afterCallbacks,
@@ -237,19 +238,25 @@ func resolveSubAgents(ctx context.Context, parentPath string, refs []AgentRefCon
 	return agents, nil
 }
 
-func resolveTools(ctx context.Context, parentPath string, toolConfigs []ToolConfig) ([]tool.Tool, error) {
+func resolveTools(ctx context.Context, parentPath string, toolConfigs []ToolConfig) ([]tool.Tool, []tool.Toolset, error) {
 	var tools []tool.Tool
+	var toolsets []tool.Toolset
 	for _, tc := range toolConfigs {
 		if tc.Name != "" {
 			ctx = context.WithValue(ctx, "parentPath", parentPath)
-			a, err := ResolveToolReference(ctx, tc.Name, tc.Args)
+			a, ts, err := ResolveToolReference(ctx, tc.Name, tc.Args)
 			if err != nil {
-				return nil, fmt.Errorf("failed to resolve tool reference %s: %w", tc.Name, err)
+				return nil, nil, fmt.Errorf("failed to resolve tool reference %s: %w", tc.Name, err)
 			}
-			tools = append(tools, a)
+			if a != nil {
+				tools = append(tools, a)
+			}
+			if ts != nil {
+				toolsets = append(toolsets, ts)
+			}
 		}
 	}
-	return tools, nil
+	return tools, toolsets, nil
 }
 
 func resolveCallbacks[T any](ctx context.Context, callbacks []CodeConfig) ([]T, error) {

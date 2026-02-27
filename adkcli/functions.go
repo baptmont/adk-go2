@@ -315,27 +315,27 @@ func RegisterFunctions() error {
 		return fmt.Errorf("error creating ask for approval tool: %w", err)
 	}
 
-	config.RegisterTool("tools_agent_002.tools.validate_email", func(ctx context.Context, _ map[string]any) (tool.Tool, error) {
+	config.RegisterToolFactory("tools_agent_002.tools.validate_email", func(ctx context.Context, _ map[string]any) (tool.Tool, error) {
 		return validateEmailTool, nil
 	})
-	config.RegisterTool("tools_agent_002.tools.get_user_id", func(ctx context.Context, _ map[string]any) (tool.Tool, error) {
+	config.RegisterToolFactory("tools_agent_002.tools.get_user_id", func(ctx context.Context, _ map[string]any) (tool.Tool, error) {
 		return getUserIDTool, nil
 	})
-	config.RegisterTool("tools_agent_002.tools.create_booking", func(ctx context.Context, _ map[string]any) (tool.Tool, error) {
+	config.RegisterToolFactory("tools_agent_002.tools.create_booking", func(ctx context.Context, _ map[string]any) (tool.Tool, error) {
 		return createBookingTool, nil
 	})
 
-	config.RegisterTool("tools_agent_004.tools.search_flights", func(ctx context.Context, _ map[string]any) (tool.Tool, error) {
+	config.RegisterToolFactory("tools_agent_004.tools.search_flights", func(ctx context.Context, _ map[string]any) (tool.Tool, error) {
 		return searchFlightsTool, nil
 	})
-	config.RegisterTool("tools_agent_004.tools.calculate_trip_cost", func(ctx context.Context, _ map[string]any) (tool.Tool, error) {
+	config.RegisterToolFactory("tools_agent_004.tools.calculate_trip_cost", func(ctx context.Context, _ map[string]any) (tool.Tool, error) {
 		return calculateTripCostTool, nil
 	})
 
-	config.RegisterTool("tools_agent_009.tools.reimburse", func(ctx context.Context, _ map[string]any) (tool.Tool, error) {
+	config.RegisterToolFactory("tools_agent_009.tools.reimburse", func(ctx context.Context, _ map[string]any) (tool.Tool, error) {
 		return reimburseTool, nil
 	})
-	config.RegisterTool("tools_agent_009.tools.ask_for_approval", func(ctx context.Context, _ map[string]any) (tool.Tool, error) {
+	config.RegisterToolFactory("tools_agent_009.tools.ask_for_approval", func(ctx context.Context, _ map[string]any) (tool.Tool, error) {
 		return askForApprovalTool, nil
 	})
 	return nil

@@ -20,9 +20,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"sync"
 
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"gopkg.in/yaml.v3"
 
 	"google.golang.org/adk/agent"
@@ -35,17 +37,20 @@ import (
 	"google.golang.org/adk/tool/exampletool"
 	"google.golang.org/adk/tool/exitlooptool"
 	"google.golang.org/adk/tool/geminitool"
+	"google.golang.org/adk/tool/mcptoolset"
 )
 
 type AgentFactory func(ctx context.Context, configBytes []byte, configPath string) (agent.Agent, error)
 
 type ToolFactory func(ctx context.Context, args map[string]any) (tool.Tool, error)
 
+type ToolsetFactory func(ctx context.Context, args map[string]any) (tool.Toolset, error)
+
 var (
 	registryMu       sync.RWMutex
 	registry         = make(map[string]AgentFactory)
 	agentRegistry    = make(map[string]agent.Agent)
-	toolRegistry     = make(map[string]ToolFactory)
+	toolRegistry     = make(map[string]any)
 	callbackRegistry = make(map[string]any)
 )
 
@@ -54,19 +59,19 @@ func init() {
 	Register("LoopAgent", NewLoopAgent)
 	Register("ParallelAgent", NewParallelAgent)
 	Register("SequentialAgent", NewSequentialAgent)
-	RegisterTool("exit_loop", func(ctx context.Context, _ map[string]any) (tool.Tool, error) {
+	RegisterToolFactory("exit_loop", func(ctx context.Context, _ map[string]any) (tool.Tool, error) {
 		return exitlooptool.New()
 	})
-	RegisterTool("google_search", func(ctx context.Context, _ map[string]any) (tool.Tool, error) {
+	RegisterToolFactory("google_search", func(ctx context.Context, _ map[string]any) (tool.Tool, error) {
 		return geminitool.GoogleSearch{}, nil
 	})
-	RegisterTool("url_context", func(ctx context.Context, _ map[string]any) (tool.Tool, error) {
+	RegisterToolFactory("url_context", func(ctx context.Context, _ map[string]any) (tool.Tool, error) {
 		return geminitool.URLContext{}, nil
 	})
-	RegisterTool("google_maps_grounding", func(ctx context.Context, _ map[string]any) (tool.Tool, error) {
+	RegisterToolFactory("google_maps_grounding", func(ctx context.Context, _ map[string]any) (tool.Tool, error) {
 		return geminitool.GoogleMaps{}, nil
 	})
-	RegisterTool("AgentTool", func(ctx context.Context, args map[string]any) (tool.Tool, error) {
+	RegisterToolFactory("AgentTool", func(ctx context.Context, args map[string]any) (tool.Tool, error) {
 		if args == nil {
 			return nil, fmt.Errorf("args is nil")
 		}
@@ -89,7 +94,7 @@ func init() {
 			return nil, fmt.Errorf("config_path not found in args")
 		}
 	})
-	RegisterTool("LongRunningFunctionTool", func(ctx context.Context, args map[string]any) (tool.Tool, error) {
+	RegisterToolFactory("LongRunningFunctionTool", func(ctx context.Context, args map[string]any) (tool.Tool, error) {
 		if args == nil {
 			return nil, fmt.Errorf("args is nil")
 		}
@@ -97,9 +102,16 @@ func init() {
 		if !ok {
 			return nil, fmt.Errorf("func not found in args")
 		}
-		return ResolveToolReference(ctx, funcName, args)
+		tool, _, err := ResolveToolReference(ctx, funcName, args)
+		if err != nil {
+			return nil, err
+		}
+		if tool == nil {
+			return nil, fmt.Errorf("tool '%s' not found", funcName)
+		}
+		return tool, nil
 	})
-	RegisterTool("ExampleTool", func(ctx context.Context, args map[string]any) (tool.Tool, error) {
+	RegisterToolFactory("ExampleTool", func(ctx context.Context, args map[string]any) (tool.Tool, error) {
     if args == nil {
 			return nil, fmt.Errorf("args is nil")
     }
@@ -146,6 +158,47 @@ func init() {
 			Examples: examples,
     })
 	})
+	RegisterToolsetFactory("McpToolset", func(ctx context.Context, args map[string]any) (tool.Toolset, error) {
+		stdioConnectionParams, ok := args["stdio_connection_params"].(map[string]any)
+		if !ok {
+			return nil, fmt.Errorf("stdio_connection_params not found in args")
+		}
+		serverParams, ok := stdioConnectionParams["server_params"].(map[string]any)
+		if !ok {
+			return nil, fmt.Errorf("server_params not found in stdio_connection_params")
+		}
+		command, ok := serverParams["command"].(string)
+		if !ok {
+			return nil, fmt.Errorf("command not found in server_params")
+		}
+		serverArgs, ok := serverParams["args"].([]any)
+		if !ok {
+			return nil, fmt.Errorf("args not found in server_params")
+		}
+		toolFilter, ok := args["tool_filter"].([]any)
+		if !ok {
+			return nil, fmt.Errorf("tool_filter not found in args")
+		}
+		serverArgsStr := make([]string, len(serverArgs))
+		for i, arg := range serverArgs {
+			serverArgsStr[i] = arg.(string)
+		}
+		toolFilterStr := make([]string, len(toolFilter))
+		for i, t := range toolFilter {
+			toolFilterStr[i] = t.(string)
+		}
+
+		mcpSet, err := mcptoolset.New(mcptoolset.Config{
+			Transport: &mcp.CommandTransport{
+				Command: exec.Command(command, serverArgsStr...),
+			},
+			ToolFilter: tool.StringPredicate(toolFilterStr),
+		})
+		if err != nil {
+			return nil, fmt.Errorf("failed to create mcp toolset: %v", err)
+		}
+		return mcpSet, nil
+	})
 }
 
 // Register allows concrete implementations to add themselves to the system.
@@ -160,12 +213,22 @@ func Register(name string, factory AgentFactory) error {
 	return nil
 }
 
-// RegisterTool allows concrete implementations to add themselves to the system.
-func RegisterTool(name string, factory ToolFactory) error {
+// RegisterToolFactory allows concrete implementations to add themselves to the system.
+func RegisterToolFactory(name string, factory ToolFactory) error {
 	registryMu.Lock()
 	defer registryMu.Unlock()
 	if _, dup := toolRegistry[name]; dup {
-		return fmt.Errorf("RegisterTool called twice for tool %s", name)
+		return fmt.Errorf("RegisterToolFactory called twice for tool %s", name)
+	}
+	toolRegistry[name] = factory
+	return nil
+}
+
+func RegisterToolsetFactory(name string, factory ToolsetFactory) error {
+	registryMu.Lock()
+	defer registryMu.Unlock()
+	if _, dup := toolRegistry[name]; dup {
+		return fmt.Errorf("RegisterToolsetFactory called twice for toolset %s", name)
 	}
 	toolRegistry[name] = factory
 	return nil
@@ -224,18 +287,26 @@ func FromConfig(ctx context.Context, configPath string) (agent.Agent, error) {
 	return factory(ctx, data, absPath)
 }
 
-func ResolveToolReference(ctx context.Context, toolName string, args map[string]any) (tool.Tool, error) {
+func ResolveToolReference(ctx context.Context, toolName string, args map[string]any) (tool.Tool, tool.Toolset, error) {
 	if toolName == "" {
-		return nil, fmt.Errorf("tool name cannot be empty")
+		return nil, nil, fmt.Errorf("tool name cannot be empty")
 	}
 
 	registryMu.RLock()
 	if t, ok := toolRegistry[toolName]; ok {
 		registryMu.RUnlock()
-		return t(ctx, args)
+		if factory, ok := t.(ToolFactory); ok {
+			tool, err := factory(ctx, args)
+			return tool, nil, err
+		}
+		if toolsetFactory, ok := t.(ToolsetFactory); ok {
+			toolset, err := toolsetFactory(ctx, args)
+			return nil, toolset, err
+		}
+		return nil, nil, fmt.Errorf("tool '%s' is not a tool or toolset factory", toolName)
 	}
 	registryMu.RUnlock()
-	return nil, fmt.Errorf("tool '%s' not found", toolName)
+	return nil, nil, fmt.Errorf("tool '%s' not found", toolName)
 }
 
 func ResolveCallbackReference(ctx context.Context, callbackName string) (any, error) {
