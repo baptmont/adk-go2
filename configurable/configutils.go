@@ -13,7 +13,7 @@
 // limitations under the License.
 
 // configutils.go provides utility functions for working with configurable agents.
-package config
+package configurable
 
 import (
 	"context"
@@ -57,20 +57,20 @@ var (
 )
 
 func init() {
-	Register("LlmAgent", NewLLMAgent)
-	Register("LoopAgent", NewLoopAgent)
-	Register("ParallelAgent", NewParallelAgent)
-	Register("SequentialAgent", NewSequentialAgent)
-	RegisterToolFactory("exit_loop", func(ctx context.Context, _ map[string]any) (tool.Tool, error) {
+	Register("LlmAgent", newLLMAgent)
+	Register("LoopAgent", newLoopAgent)
+	Register("ParallelAgent", newParallelAgent)
+	Register("SequentialAgent", newSequentialAgent)
+	RegisterToolFactory("exit_loop", func(_ context.Context, _ map[string]any) (tool.Tool, error) {
 		return exitlooptool.New()
 	})
-	RegisterToolFactory("google_search", func(ctx context.Context, _ map[string]any) (tool.Tool, error) {
+	RegisterToolFactory("google_search", func(_ context.Context, _ map[string]any) (tool.Tool, error) {
 		return geminitool.GoogleSearch{}, nil
 	})
-	RegisterToolFactory("url_context", func(ctx context.Context, _ map[string]any) (tool.Tool, error) {
+	RegisterToolFactory("url_context", func(_ context.Context, _ map[string]any) (tool.Tool, error) {
 		return geminitool.New("url_context", "url context", &genai.Tool{URLContext: &genai.URLContext{}}), nil
 	})
-	RegisterToolFactory("google_maps_grounding", func(ctx context.Context, _ map[string]any) (tool.Tool, error) {
+	RegisterToolFactory("google_maps_grounding", func(_ context.Context, _ map[string]any) (tool.Tool, error) {
 		return geminitool.New("google_maps_grounding", "google maps grounding", &genai.Tool{GoogleMaps: &genai.GoogleMaps{}}), nil
 	})
 	RegisterToolFactory("AgentTool", func(ctx context.Context, args map[string]any) (tool.Tool, error) {
@@ -100,7 +100,7 @@ func init() {
 		if args == nil {
 			return nil, fmt.Errorf("args is nil")
 		}
-		funcName,ok := args["func"].(string)
+		funcName, ok := args["func"].(string)
 		if !ok {
 			return nil, fmt.Errorf("func not found in args")
 		}
@@ -114,23 +114,23 @@ func init() {
 		return tool, nil
 	})
 	RegisterToolFactory("ExampleTool", func(ctx context.Context, args map[string]any) (tool.Tool, error) {
-    if args == nil {
+		if args == nil {
 			return nil, fmt.Errorf("args is nil")
-    }
+		}
 
-    raw, ok := args["examples"]
-    if !ok {
+		raw, ok := args["examples"]
+		if !ok {
 			return nil, fmt.Errorf("examples not found in args")
-    }
+		}
 
-    // 1. Cast the top-level 'examples' to a generic slice
-    examplesSlice, ok := raw.([]any)
-    if !ok {
+		// 1. Cast the top-level 'examples' to a generic slice
+		examplesSlice, ok := raw.([]any)
+		if !ok {
 			return nil, fmt.Errorf("examples is not a list")
-    }
+		}
 
-    // 2. Iterate and normalize the 'output' field
-    for i, item := range examplesSlice {
+		// 2. Iterate and normalize the 'output' field
+		for i, item := range examplesSlice {
 			m, ok := item.(map[string]any)
 			if !ok {
 				continue
@@ -141,24 +141,24 @@ func init() {
 				continue
 			}
 
-			// Check if 'output' is NOT a slice. If it's a single object, 
+			// Check if 'output' is NOT a slice. If it's a single object,
 			// wrap it in a new slice []any{output}
 			if _, isSlice := output.([]any); !isSlice {
 				m["output"] = []any{output}
 				examplesSlice[i] = m
 			}
-    }
+		}
 
-    // 3. Now marshal/unmarshal as usual into your clean struct
-    bytes, _ := json.Marshal(examplesSlice)
-    var examples []*exampletool.Example
-    if err := json.Unmarshal(bytes, &examples); err != nil {
+		// 3. Now marshal/unmarshal as usual into your clean struct
+		bytes, _ := json.Marshal(examplesSlice)
+		var examples []*exampletool.Example
+		if err := json.Unmarshal(bytes, &examples); err != nil {
 			return nil, fmt.Errorf("failed to decode normalized examples: %w", err)
-    }
+		}
 
-    return exampletool.New(exampletool.ExampleToolConfig{
+		return exampletool.New(exampletool.ExampleToolConfig{
 			Examples: examples,
-    })
+		})
 	})
 	RegisterToolsetFactory("McpToolset", func(ctx context.Context, args map[string]any) (tool.Toolset, error) {
 		stdioConnectionParams, ok := args["stdio_connection_params"].(map[string]any)
@@ -264,7 +264,7 @@ func FromConfig(ctx context.Context, configPath string) (agent.Agent, error) {
 	}
 
 	// 2. Peek at the "agent_class" field to know which factory to use.
-	var baseConfig BaseAgentConfig
+	var baseConfig baseAgentConfig
 	if err := yaml.Unmarshal(data, &baseConfig); err != nil {
 		return nil, fmt.Errorf("invalid YAML content: %w", err)
 	}
@@ -364,8 +364,8 @@ func ResolveAgentReference(ctx context.Context, parentPath string, refPath strin
 }
 
 // NewLLMAgent is the factory function registered in the system.
-func NewLLMAgent(ctx context.Context, data []byte, configPath string) (agent.Agent, error) {
-	var cfg LLMAgentYAMLConfig
+func newLLMAgent(ctx context.Context, data []byte, configPath string) (agent.Agent, error) {
+	var cfg llmAgentYAMLConfig
 
 	// Unmarshal parses the shared fields (Name) into BaseAgentConfig
 	// AND the specific fields (ModelName) into LLMAgentConfig simultaneously.
@@ -383,7 +383,7 @@ func NewLLMAgent(ctx context.Context, data []byte, configPath string) (agent.Age
 
 	cfg.ConfigPath = configPath
 
-	agentConfig, err := cfg.ToLLMAgentConfig(ctx)
+	agentConfig, err := cfg.toLLMAgentConfig(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create LLM agent config: %w", err)
 	}
@@ -391,8 +391,8 @@ func NewLLMAgent(ctx context.Context, data []byte, configPath string) (agent.Age
 	return llmagent.New(*agentConfig)
 }
 
-func NewLoopAgent(ctx context.Context, data []byte, configPath string) (agent.Agent, error) {
-	var cfg LoopAgentYAMLConfig
+func newLoopAgent(ctx context.Context, data []byte, configPath string) (agent.Agent, error) {
+	var cfg loopAgentYAMLConfig
 
 	// Unmarshal parses the shared fields (Name) into BaseAgentConfig
 	// AND the specific fields (ModelName) into LLMAgentConfig simultaneously.
@@ -407,7 +407,7 @@ func NewLoopAgent(ctx context.Context, data []byte, configPath string) (agent.Ag
 
 	cfg.ConfigPath = configPath
 
-	agentConfig, err := cfg.ToLoopAgentConfig(ctx)
+	agentConfig, err := cfg.toLoopAgentConfig(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create Loop agent config: %w", err)
 	}
@@ -415,8 +415,8 @@ func NewLoopAgent(ctx context.Context, data []byte, configPath string) (agent.Ag
 	return loopagent.New(*agentConfig)
 }
 
-func NewParallelAgent(ctx context.Context, data []byte, configPath string) (agent.Agent, error) {
-	var cfg ParallelAgentYAMLConfig
+func newParallelAgent(ctx context.Context, data []byte, configPath string) (agent.Agent, error) {
+	var cfg parallelAgentYAMLConfig
 
 	// Unmarshal parses the shared fields (Name) into BaseAgentConfig
 	// AND the specific fields (ModelName) into LLMAgentConfig simultaneously.
@@ -431,7 +431,7 @@ func NewParallelAgent(ctx context.Context, data []byte, configPath string) (agen
 
 	cfg.ConfigPath = configPath
 
-	agentConfig, err := cfg.ToParallelAgentConfig(ctx)
+	agentConfig, err := cfg.toParallelAgentConfig(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create Parallel agent config: %w", err)
 	}
@@ -439,8 +439,8 @@ func NewParallelAgent(ctx context.Context, data []byte, configPath string) (agen
 	return parallelagent.New(*agentConfig)
 }
 
-func NewSequentialAgent(ctx context.Context, data []byte, configPath string) (agent.Agent, error) {
-	var cfg SequentialAgentYAMLConfig
+func newSequentialAgent(ctx context.Context, data []byte, configPath string) (agent.Agent, error) {
+	var cfg sequentialAgentYAMLConfig
 
 	// Unmarshal parses the shared fields (Name) into BaseAgentConfig
 	// AND the specific fields (ModelName) into LLMAgentConfig simultaneously.
@@ -455,7 +455,7 @@ func NewSequentialAgent(ctx context.Context, data []byte, configPath string) (ag
 
 	cfg.ConfigPath = configPath
 
-	agentConfig, err := cfg.ToSequentialAgentConfig(ctx)
+	agentConfig, err := cfg.toSequentialAgentConfig(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create Sequential agent config: %w", err)
 	}

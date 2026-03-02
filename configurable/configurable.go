@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package config
+package configurable
 
 import (
 	"context"
@@ -31,9 +31,9 @@ import (
 	"google.golang.org/adk/tool"
 )
 
-// CodeConfig represents a reference to a function or callback.
-// Equivalent to: common_configs.CodeConfig
-type CodeConfig struct {
+// codeConfig represents a reference to a function or callback.
+// Equivalent to: common_configs.codeConfig
+type codeConfig struct {
 	// Name of the function/method (e.g., "my_pkg.security.Check")
 	Name string `yaml:"name"`
 
@@ -41,9 +41,9 @@ type CodeConfig struct {
 	Params map[string]any `yaml:"params,omitempty"`
 }
 
-// AgentRefConfig represents a reference to a sub-agent.
-// Equivalent to: common_configs.AgentRefConfig
-type AgentRefConfig struct {
+// agentRefConfig represents a reference to a sub-agent.
+// Equivalent to: common_configs.agentRefConfig
+type agentRefConfig struct {
 	// Path to another agent's YAML file
 	ConfigPath string `yaml:"config_path,omitempty"`
 
@@ -59,11 +59,11 @@ type ToolConfig struct {
 	Args map[string]any `yaml:"args,omitempty"`
 }
 
-// BaseAgentConfig matches the Python BaseAgentConfig Pydantic model.
+// baseAgentConfig matches the Python baseAgentConfig Pydantic model.
 //
 // Usage: Do not use this struct directly for unmarshalling specific agents.
 // Embed it into concrete agent configs (see Example below).
-type BaseAgentConfig struct {
+type baseAgentConfig struct {
 	// Required. The class of the agent.
 	// Default is "BaseAgent" in Python, but usually overridden by concrete agents.
 	AgentClass string `yaml:"agent_class"`
@@ -75,13 +75,13 @@ type BaseAgentConfig struct {
 	Description string `yaml:"description,omitempty"`
 
 	// Optional. List of sub-agents.
-	SubAgents []AgentRefConfig `yaml:"sub_agents,omitempty"`
+	SubAgents []agentRefConfig `yaml:"sub_agents,omitempty"`
 
 	// Optional. Callbacks to run before execution.
-	BeforeAgentCallbacks []CodeConfig `yaml:"before_agent_callbacks,omitempty"`
+	BeforeAgentCallbacks []codeConfig `yaml:"before_agent_callbacks,omitempty"`
 
 	// Optional. Callbacks to run after execution.
-	AfterAgentCallbacks []CodeConfig `yaml:"after_agent_callbacks,omitempty"`
+	AfterAgentCallbacks []codeConfig `yaml:"after_agent_callbacks,omitempty"`
 
 	// Path to the config file.
 	ConfigPath string `yaml:"-"`
@@ -93,11 +93,11 @@ type BaseAgentConfig struct {
 	AdditionalProperties map[string]any `yaml:",inline"`
 }
 
-// LLMAgentYAMLConfig is the concrete config for a specific agent.
-type LLMAgentYAMLConfig struct {
-	// 1. Embed BaseAgentConfig with ",inline".
+// llmAgentYAMLConfig is the concrete config for a specific agent.
+type llmAgentYAMLConfig struct {
+	// 1. Embed baseAgentConfig with ",inline".
 	// This pulls "name", "sub_agents", etc. to the top level of the YAML.
-	BaseAgentConfig `yaml:",inline"`
+	baseAgentConfig `yaml:",inline"`
 
 	// 2. Define the "extra" fields specific to this agent here.
 	Model string `yaml:"model"`
@@ -113,7 +113,7 @@ type LLMAgentYAMLConfig struct {
 	GenerateContentConfig *genai.GenerateContentConfig `yaml:"generate_content_config,omitempty"`
 }
 
-func (c *LLMAgentYAMLConfig) ToLLMAgentConfig(ctx context.Context) (*llmagent.Config, error) {
+func (c *llmAgentYAMLConfig) toLLMAgentConfig(ctx context.Context) (*llmagent.Config, error) {
 	if !googlellm.IsGeminiModel(c.Model) {
 		return nil, fmt.Errorf("model %s is not supported", c.Model)
 	}
@@ -161,12 +161,12 @@ func (c *LLMAgentYAMLConfig) ToLLMAgentConfig(ctx context.Context) (*llmagent.Co
 	}, nil
 }
 
-type LoopAgentYAMLConfig struct {
-	BaseAgentConfig `yaml:",inline"`
+type loopAgentYAMLConfig struct {
+	baseAgentConfig `yaml:",inline"`
 	MaxIterations   uint `yaml:"max_iterations"`
 }
 
-func (c *LoopAgentYAMLConfig) ToLoopAgentConfig(ctx context.Context) (*loopagent.Config, error) {
+func (c *loopAgentYAMLConfig) toLoopAgentConfig(ctx context.Context) (*loopagent.Config, error) {
 	subAgents, err := resolveSubAgents(ctx, c.ConfigPath, c.SubAgents)
 	if err != nil {
 		return nil, err
@@ -183,11 +183,11 @@ func (c *LoopAgentYAMLConfig) ToLoopAgentConfig(ctx context.Context) (*loopagent
 }
 
 // ParallelAgentYAMLConfig is the concrete config for a specific agent.
-type ParallelAgentYAMLConfig struct {
-	BaseAgentConfig `yaml:",inline"`
+type parallelAgentYAMLConfig struct {
+	baseAgentConfig `yaml:",inline"`
 }
 
-func (c *ParallelAgentYAMLConfig) ToParallelAgentConfig(ctx context.Context) (*parallelagent.Config, error) {
+func (c *parallelAgentYAMLConfig) toParallelAgentConfig(ctx context.Context) (*parallelagent.Config, error) {
 	subAgents, err := resolveSubAgents(ctx, c.ConfigPath, c.SubAgents)
 	if err != nil {
 		return nil, err
@@ -203,11 +203,11 @@ func (c *ParallelAgentYAMLConfig) ToParallelAgentConfig(ctx context.Context) (*p
 }
 
 // SequentialAgentYAMLConfig is the concrete config for a specific agent.
-type SequentialAgentYAMLConfig struct {
-	BaseAgentConfig `yaml:",inline"`
+type sequentialAgentYAMLConfig struct {
+	baseAgentConfig `yaml:",inline"`
 }
 
-func (c *SequentialAgentYAMLConfig) ToSequentialAgentConfig(ctx context.Context) (*sequentialagent.Config, error) {
+func (c *sequentialAgentYAMLConfig) toSequentialAgentConfig(ctx context.Context) (*sequentialagent.Config, error) {
 	subAgents, err := resolveSubAgents(ctx, c.ConfigPath, c.SubAgents)
 	if err != nil {
 		return nil, err
@@ -222,7 +222,7 @@ func (c *SequentialAgentYAMLConfig) ToSequentialAgentConfig(ctx context.Context)
 	}, nil
 }
 
-func resolveSubAgents(ctx context.Context, parentPath string, refs []AgentRefConfig) ([]agent.Agent, error) {
+func resolveSubAgents(ctx context.Context, parentPath string, refs []agentRefConfig) ([]agent.Agent, error) {
 	var agents []agent.Agent
 	for _, ref := range refs {
 		if ref.ConfigPath != "" {
@@ -259,7 +259,7 @@ func resolveTools(ctx context.Context, parentPath string, toolConfigs []ToolConf
 	return tools, toolsets, nil
 }
 
-func resolveCallbacks[T any](ctx context.Context, callbacks []CodeConfig) ([]T, error) {
+func resolveCallbacks[T any](ctx context.Context, callbacks []codeConfig) ([]T, error) {
 	var cbs []T
 	for _, ref := range callbacks {
 		if ref.Name != "" {

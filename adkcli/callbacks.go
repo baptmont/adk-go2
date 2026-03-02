@@ -20,7 +20,7 @@ import (
 	"google.golang.org/genai"
 
 	"google.golang.org/adk/agent"
-	"google.golang.org/adk/config"
+	"google.golang.org/adk/configurable"
 	"google.golang.org/adk/session"
 )
 
@@ -73,9 +73,9 @@ func afterAgentCallback2(ctx agent.CallbackContext) (*genai.Content, error) {
 }
 
 func RegisterCallbacks() {
-	config.RegisterCallback("callback_agent_001.callbacks.before_agent_callback1", agent.BeforeAgentCallback(beforeAgentCallback1))
-	config.RegisterCallback("callback_agent_001.callbacks.before_agent_callback2", agent.BeforeAgentCallback(beforeAgentCallback2))
-	config.RegisterCallback("callback_agent_002.callbacks.shortcut_agent_execution", agent.BeforeAgentCallback(shortcutAgentExecution))
-	config.RegisterCallback("callback_agent_003.callbacks.after_agent_callback1", agent.AfterAgentCallback(afterAgentCallback1))
-	config.RegisterCallback("callback_agent_003.callbacks.after_agent_callback2", agent.AfterAgentCallback(afterAgentCallback2))
+	configurable.RegisterCallback("callback_agent_001.callbacks.before_agent_callback1", agent.BeforeAgentCallback(beforeAgentCallback1))
+	configurable.RegisterCallback("callback_agent_001.callbacks.before_agent_callback2", agent.BeforeAgentCallback(beforeAgentCallback2))
+	configurable.RegisterCallback("callback_agent_002.callbacks.shortcut_agent_execution", agent.BeforeAgentCallback(shortcutAgentExecution))
+	configurable.RegisterCallback("callback_agent_003.callbacks.after_agent_callback1", agent.AfterAgentCallback(afterAgentCallback1))
+	configurable.RegisterCallback("callback_agent_003.callbacks.after_agent_callback2", agent.AfterAgentCallback(afterAgentCallback2))
 }

@@ -27,7 +27,7 @@ import (
 	"google.golang.org/adk/agent"
 	"google.golang.org/adk/cmd/launcher"
 	"google.golang.org/adk/cmd/launcher/full"
-	"google.golang.org/adk/config"
+	"google.golang.org/adk/configurable"
 	"google.golang.org/adk/model"
 	"google.golang.org/adk/plugin"
 	"google.golang.org/adk/plugin/replayplugin"
@@ -84,7 +84,7 @@ func main() {
 		fmt.Printf("➡️  Loading agent from: %s\n", configPath)
 
 		// This reads the YAML, finds the 'agent_class', and calls the registered factory.
-		myAgent, err := config.FromConfig(context.Background(), configPath)
+		myAgent, err := configurable.FromConfig(context.Background(), configPath)
 		if err != nil {
 			log.Printf("⚠️  Error loading agent at %s: %v", configPath, err)
 			continue // Skip this one and try the next
