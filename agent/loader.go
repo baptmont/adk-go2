@@ -39,10 +39,9 @@ type singleLoader struct {
 	root Agent
 }
 
-type multiLoaderTest struct {
+type multiAgentMapLoader struct {
 	agentMap map[string]Agent
 }
-
 
 // NewSingleLoader returns a loader with only one agent, which becomes the root agent
 func NewSingleLoader(a Agent) Loader {
@@ -111,18 +110,16 @@ func (m *multiLoader) RootAgent() Agent {
 	return m.root
 }
 
-
-
-// NewMultiLoader returns a new AgentLoader with the given root Agent and other agents.
+// NewMultiAgentMapLoader returns a new AgentLoader with the given root Agent and other agents.
 // Returns an error if more than one agent (including root) shares the same name
-func NewMultiLoaderTest(agentMap map[string]Agent) (Loader, error) {
-	return &multiLoaderTest{
+func NewMultiAgentMapLoader(agentMap map[string]Agent) (Loader, error) {
+	return &multiAgentMapLoader{
 		agentMap: agentMap,
 	}, nil
 }
 
-// multiAgentLoader implements AgentLoader. Returns the list of all agents' names (including root agent)
-func (m *multiLoaderTest) ListAgents() []string {
+// multiAgentMapLoader implements AgentLoader. Returns the list of all agents' names (including root agent)
+func (m *multiAgentMapLoader) ListAgents() []string {
 	agents := make([]string, 0, len(m.agentMap))
 	for name := range m.agentMap {
 		agents = append(agents, name)
@@ -130,8 +127,8 @@ func (m *multiLoaderTest) ListAgents() []string {
 	return agents
 }
 
-// multiAgentLoader implements LoadAgent. Returns an agent with given name or error if no such an agent is found
-func (m *multiLoaderTest) LoadAgent(name string) (Agent, error) {
+// multiAgentMapLoader implements LoadAgent. Returns an agent with given name or error if no such an agent is found
+func (m *multiAgentMapLoader) LoadAgent(name string) (Agent, error) {
 	agent, ok := m.agentMap[name]
 	if !ok {
 		return nil, fmt.Errorf("agent %s not found. Please specify one of those: %v", name, m.ListAgents())
@@ -139,8 +136,8 @@ func (m *multiLoaderTest) LoadAgent(name string) (Agent, error) {
 	return agent, nil
 }
 
-// multiAgentLoader implements LoadAgent.
-func (m *multiLoaderTest) RootAgent() Agent {
+// multiAgentMapLoader implements LoadAgent.
+func (m *multiAgentMapLoader) RootAgent() Agent {
 	for _, a := range m.agentMap {
 		return a
 	}

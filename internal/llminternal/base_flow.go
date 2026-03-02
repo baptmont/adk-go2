@@ -432,7 +432,6 @@ func (f *Flow) finalizeModelResponseEvent(ctx agent.InvocationContext, resp *mod
 
 	ev := session.NewEvent(ctx.InvocationID())
 	ev.Author = ctx.Agent().Name()
-	print("Author: ", ev.Author)
 	ev.Branch = ctx.Branch()
 	ev.LLMResponse = *resp
 	ev.Actions.StateDelta = stateDelta

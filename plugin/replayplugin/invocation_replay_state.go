@@ -20,8 +20,8 @@ import (
 	"google.golang.org/adk/plugin/replayplugin/recording"
 )
 
-// InvocationReplayState tracks per-invocation replay state to isolate concurrent runs.
-type InvocationReplayState struct {
+// invocationReplayState tracks per-invocation replay state to isolate concurrent runs.
+type invocationReplayState struct {
 	testCasePath     string
 	userMessageIndex int
 	recordings       *recording.Recordings
@@ -35,9 +35,9 @@ type InvocationReplayState struct {
 	cond     *sync.Cond
 }
 
-// NewInvocationReplayState behaves as the constructor.
-func NewInvocationReplayState(testCasePath string, userMessageIndex int, recs *recording.Recordings) *InvocationReplayState {
-	state := &InvocationReplayState{
+// newInvocationReplayState behaves as the constructor.
+func newInvocationReplayState(testCasePath string, userMessageIndex int, recs *recording.Recordings) *invocationReplayState {
+	state := &invocationReplayState{
 		testCasePath:       testCasePath,
 		userMessageIndex:   userMessageIndex,
 		recordings:         recs,
@@ -50,24 +50,24 @@ func NewInvocationReplayState(testCasePath string, userMessageIndex int, recs *r
 }
 
 // GetTestCasePath returns the test case path.
-func (s *InvocationReplayState) GetTestCasePath() string {
+func (s *invocationReplayState) GetTestCasePath() string {
 	return s.testCasePath
 }
 
 // GetUserMessageIndex returns the user message index.
-func (s *InvocationReplayState) GetUserMessageIndex() int {
+func (s *invocationReplayState) GetUserMessageIndex() int {
 	return s.userMessageIndex
 }
 
 // GetRecordings returns the recordings object.
-func (s *InvocationReplayState) GetRecordings() *recording.Recordings {
+func (s *invocationReplayState) GetRecordings() *recording.Recordings {
 	return s.recordings
 }
 
 // GetAgentReplayIndex returns the index for the agent.
 // In Go, looking up a missing key returns the zero value (0),
 // so getOrDefault is intrinsic to the language for integers.
-func (s *InvocationReplayState) GetAgentReplayIndex(agentName string) (int, bool) {
+func (s *invocationReplayState) GetAgentReplayIndex(agentName string) (int, bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	val, ok := s.agentReplayIndices[agentName]
@@ -75,14 +75,14 @@ func (s *InvocationReplayState) GetAgentReplayIndex(agentName string) (int, bool
 }
 
 // IncrementAgentReplayIndex increments the replay index for a specific agent.
-func (s *InvocationReplayState) IncrementAgentReplayIndex(agentName string) {
+func (s *invocationReplayState) IncrementAgentReplayIndex(agentName string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.agentReplayIndices[agentName]++
 }
 
 // IncrementCurrentIndex increments the current index.
-func (s *InvocationReplayState) IncrementCurrentIndex() {
+func (s *invocationReplayState) IncrementCurrentIndex() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.curIndex++

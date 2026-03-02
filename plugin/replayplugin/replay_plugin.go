@@ -52,7 +52,7 @@ import (
 // - Errors during model and tool execution
 func New() (*plugin.Plugin, error) {
 	p := &replayPlugin{
-		invocationStates: make(map[string]*InvocationReplayState),
+		invocationStates: make(map[string]*invocationReplayState),
 	}
 	return plugin.New(plugin.Config{
 		Name:                "replay_plugin",
@@ -75,7 +75,7 @@ func MustNew() *plugin.Plugin {
 type replayPlugin struct {
 	mu               sync.Mutex // Mutex to protect the map
 	name             string
-	invocationStates map[string]*InvocationReplayState
+	invocationStates map[string]*invocationReplayState
 }
 
 func (p *replayPlugin) beforeRun(ctx agent.InvocationContext) (*genai.Content, error) {
@@ -177,12 +177,10 @@ func (p *replayPlugin) isReplayModeOn(sessionState session.State) bool {
 		return false
 	}
 
-	fmt.Println("Replay mode is enabled")
-
 	return true
 }
 
-func (p *replayPlugin) getInvocationState(ctx agent.CallbackContext) (*InvocationReplayState, error) {
+func (p *replayPlugin) getInvocationState(ctx agent.CallbackContext) (*invocationReplayState, error) {
 	invocationID := ctx.InvocationID()
 	state, ok := p.invocationStates[invocationID]
 	if !ok {
@@ -191,7 +189,7 @@ func (p *replayPlugin) getInvocationState(ctx agent.CallbackContext) (*Invocatio
 	return state, nil
 }
 
-func (p *replayPlugin) loadInvocationState(ctx agent.InvocationContext) (*InvocationReplayState, error) {
+func (p *replayPlugin) loadInvocationState(ctx agent.InvocationContext) (*invocationReplayState, error) {
 	invocationID := ctx.InvocationID()
 
 	// 1. Extract Configuration
@@ -262,7 +260,7 @@ func (p *replayPlugin) loadInvocationState(ctx agent.InvocationContext) (*Invoca
 	}
 
 	// 4. Create and Store State
-	state := NewInvocationReplayState(caseDir, msgIndex, &recordings)
+	state := newInvocationReplayState(caseDir, msgIndex, &recordings)
 
 	p.mu.Lock()
 	p.invocationStates[invocationID] = state
@@ -271,7 +269,7 @@ func (p *replayPlugin) loadInvocationState(ctx agent.InvocationContext) (*Invoca
 	return state, nil
 }
 
-func getNextRecordingForAgent(state *InvocationReplayState, agentName string) (*recording.Recording, error) {
+func getNextRecordingForAgent(state *invocationReplayState, agentName string) (*recording.Recording, error) {
 	// Get current agent index
 	currentAgentIndex, ok := state.GetAgentReplayIndex(agentName)
 	if !ok {
@@ -285,8 +283,6 @@ func getNextRecordingForAgent(state *InvocationReplayState, agentName string) (*
 			agentRecordings = append(agentRecordings, &recording)
 		}
 	}
-
-	fmt.Printf("Here with index %d\n", currentAgentIndex)
 
 	// Check if we have enough recordings for this agent
 	if currentAgentIndex >= len(agentRecordings) {
@@ -316,7 +312,7 @@ func getNextRecordingForAgent(state *InvocationReplayState, agentName string) (*
 	return expectedRecording, nil
 }
 
-func (p *replayPlugin) verifyAndGetNextLLMRecordingForAgent(state *InvocationReplayState, agentName string, llmRequest *model.LLMRequest) (*recording.LLMRecording, error) {
+func (p *replayPlugin) verifyAndGetNextLLMRecordingForAgent(state *invocationReplayState, agentName string, llmRequest *model.LLMRequest) (*recording.LLMRecording, error) {
 	currentAgentIndex, ok := state.GetAgentReplayIndex(agentName)
 	if !ok {
 		currentAgentIndex = 0
@@ -358,7 +354,7 @@ func verifyLLMRequestMatch(expectedLLMRequest, actualLLMRequest *model.LLMReques
 	return nil
 }
 
-func (p *replayPlugin) verifyAndGetNextToolRecordingForAgent(state *InvocationReplayState, agentName string, t tool.Tool, args map[string]any) (*recording.ToolRecording, error) {
+func (p *replayPlugin) verifyAndGetNextToolRecordingForAgent(state *invocationReplayState, agentName string, t tool.Tool, args map[string]any) (*recording.ToolRecording, error) {
 	currentAgentIndex, ok := state.GetAgentReplayIndex(agentName)
 	if !ok {
 		currentAgentIndex = 0

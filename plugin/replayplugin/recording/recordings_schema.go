@@ -25,20 +25,20 @@ import (
 // LLMRecording represents a paired LLM request and response.
 type LLMRecording struct {
 	// Required. The LLM request.
-	LlmRequest *LLMRequestRecording `yaml:"llm_request,omitempty"`
+	LlmRequest *llmRequestRecording `yaml:"llm_request,omitempty"`
 
 	// Required. The LLM response.
-	LlmResponse *LLMResponseRecording `yaml:"llm_response,omitempty"`
+	LlmResponse *llmResponseRecording `yaml:"llm_response,omitempty"`
 }
 
-type LLMRequestRecording struct {
+type llmRequestRecording struct {
 	Model    string `yaml:"model,omitempty"`
 	Contents []*localContent `yaml:"contents,omitempty"`
 	Config   *localGenerateContentConfig `yaml:"config,omitempty"`
 	Tools    map[string]any `yaml:"tools,omitempty"`
 }
 
-func (l *LLMRequestRecording) ToLLMRequest() *model.LLMRequest {
+func (l *llmRequestRecording) ToLLMRequest() *model.LLMRequest {
 	return &model.LLMRequest{
 		Model:    l.Model,
 		Contents: transformContents(l.Contents),
@@ -114,7 +114,7 @@ func (l *localFunctionDeclaration) ToGenAI() *genai.FunctionDeclaration {
 	}
 }
 
-type LLMResponseRecording struct {
+type llmResponseRecording struct {
 	Content           *localContent `yaml:"content,omitempty"`
 	GroundingMetadata *localGroundingMetadata `yaml:"grounding_metadata,omitempty"`
 	UsageMetadata     *localUsageMetadata `yaml:"usage_metadata,omitempty"`
@@ -129,7 +129,7 @@ type LLMResponseRecording struct {
 	ModelVersion      string `yaml:"model_version,omitempty"`
 }
 
-func (l *LLMResponseRecording) ToLLMResponse() *model.LLMResponse {
+func (l *llmResponseRecording) ToLLMResponse() *model.LLMResponse {
 	return &model.LLMResponse{
 		Content:           l.Content.ToGenAI(),
 		GroundingMetadata: l.GroundingMetadata.ToGenAI(),

@@ -22,17 +22,13 @@ import (
 	"os"
 	"path/filepath"
 
-	"google.golang.org/genai"
-
 	"google.golang.org/adk/agent"
 	"google.golang.org/adk/cmd/launcher"
 	"google.golang.org/adk/cmd/launcher/full"
 	"google.golang.org/adk/configurable"
-	"google.golang.org/adk/model"
 	"google.golang.org/adk/plugin"
 	"google.golang.org/adk/plugin/replayplugin"
 	"google.golang.org/adk/runner"
-	"google.golang.org/adk/tool"
 )
 
 func main() {
@@ -103,27 +99,7 @@ func main() {
 
 	ctx := context.Background()
 
-	p, err := plugin.New(plugin.Config{
-		Name: "test",
-		BeforeAgentCallback: func(ctx agent.CallbackContext) (*genai.Content, error) {
-			fmt.Printf("\n🤖 BeforeAgentCallback for %s\n", ctx.AgentName())
-			return nil, nil
-		},
-		BeforeModelCallback: func(ctx agent.CallbackContext, llmRequest *model.LLMRequest) (*model.LLMResponse, error) {
-			fmt.Printf("\n🤖 BeforeModelCallback for %s\n", ctx.AgentName())
-			fmt.Printf("🤖 %s , %s , %s\n", ctx.AppName(), ctx.UserID(), ctx.SessionID())
-			return nil, nil
-		},
-		AfterToolCallback: func(ctx tool.Context, tool tool.Tool, args, result map[string]any, err error) (map[string]any, error) {
-			fmt.Printf("\n🤖 AfterToolCallback for %s call to %s\n", ctx.AgentName(), tool.Name())
-			return nil, nil
-		},
-	})
-	if err != nil {
-		log.Fatalf("Error loading plugin: %v", err)
-	}
-
-	loader, err := agent.NewMultiLoaderTest(agentsMap)
+	loader, err := agent.NewMultiAgentMapLoader(agentsMap)
 	if err != nil {
 		log.Fatalf("Error loading agent: %v", err)
 	}
@@ -132,7 +108,6 @@ func main() {
 		AgentLoader: loader,
 		PluginConfig: runner.PluginConfig{
 			Plugins: []*plugin.Plugin{
-				p,
 				replayplugin.MustNew(),
 			},
 		},
