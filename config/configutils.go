@@ -27,6 +27,8 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"gopkg.in/yaml.v3"
 
+	"google.golang.org/genai"
+
 	"google.golang.org/adk/agent"
 	"google.golang.org/adk/agent/llmagent"
 	"google.golang.org/adk/agent/workflowagents/loopagent"
@@ -66,10 +68,10 @@ func init() {
 		return geminitool.GoogleSearch{}, nil
 	})
 	RegisterToolFactory("url_context", func(ctx context.Context, _ map[string]any) (tool.Tool, error) {
-		return geminitool.URLContext{}, nil
+		return geminitool.New("url_context", "url context", &genai.Tool{URLContext: &genai.URLContext{}}), nil
 	})
 	RegisterToolFactory("google_maps_grounding", func(ctx context.Context, _ map[string]any) (tool.Tool, error) {
-		return geminitool.GoogleMaps{}, nil
+		return geminitool.New("google_maps_grounding", "google maps grounding", &genai.Tool{GoogleMaps: &genai.GoogleMaps{}}), nil
 	})
 	RegisterToolFactory("AgentTool", func(ctx context.Context, args map[string]any) (tool.Tool, error) {
 		if args == nil {

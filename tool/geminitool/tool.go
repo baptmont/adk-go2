@@ -39,9 +39,10 @@ import (
 )
 
 // New creates  gemini API tool.
-func New(name string, t *genai.Tool) tool.Tool {
+func New(name string, description string, t *genai.Tool) tool.Tool {
 	return &geminiTool{
 		name:  name,
+		description: description,
 		value: t,
 	}
 }
@@ -49,6 +50,7 @@ func New(name string, t *genai.Tool) tool.Tool {
 // geminiTool is a wrapper around a genai.Tool.
 type geminiTool struct {
 	name  string
+	description string
 	value *genai.Tool
 }
 
@@ -64,7 +66,7 @@ func (t *geminiTool) Name() string {
 
 // Description implements tool.Tool.
 func (t *geminiTool) Description() string {
-	return "Performs a Google search to retrieve information from the web."
+	return t.description
 }
 
 // IsLongRunning implements tool.Tool.
