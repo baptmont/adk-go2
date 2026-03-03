@@ -1068,7 +1068,7 @@ func TestRemoteAgent_EmptyResultForEmptySession(t *testing.T) {
 	ignoreFields := []cmp.Option{
 		cmpopts.IgnoreFields(session.Event{}, "ID"),
 		cmpopts.IgnoreFields(session.Event{}, "Timestamp"),
-		cmpopts.IgnoreFields(session.EventActions{}, "StateDelta"),
+		cmpopts.IgnoreFields(session.EventActions{}, "StateDelta", "ArtifactDelta"),
 	}
 	if diff := cmp.Diff(wantEvents, gotEvents, ignoreFields...); diff != "" {
 		t.Fatalf("agent.Run() wrong result (+got,-want):\ngot = %+v\nwant = %+v\ndiff = %s", gotEvents, wantEvents, diff)

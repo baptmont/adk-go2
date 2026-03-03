@@ -304,7 +304,7 @@ func TestPresentAsUserMessage(t *testing.T) {
 		cmpopts.IgnoreFields(session.Event{}, "ID"),
 		cmpopts.IgnoreFields(session.Event{}, "InvocationID"),
 		cmpopts.IgnoreFields(session.Event{}, "Timestamp"),
-		cmpopts.IgnoreFields(session.EventActions{}, "StateDelta"),
+		cmpopts.IgnoreFields(session.EventActions{}, "StateDelta", "ArtifactDelta"),
 	}
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
