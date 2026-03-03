@@ -460,3 +460,78 @@ func (s *spyAgent) Run(ctx agent.InvocationContext) iter.Seq2[*session.Event, er
 		}
 	}
 }
+
+func TestParallelAgent_StateSync(t *testing.T) {
+	ctx := t.Context()
+
+	var gotValue any
+	var gotErr error
+
+	subAgent, err := agent.New(agent.Config{
+		Name: "test_subagent",
+		Run: func(agent.InvocationContext) iter.Seq2[*session.Event, error] {
+			return func(yield func(*session.Event, error) bool) {
+				event := &session.Event{
+					LLMResponse: model.LLMResponse{
+						Content: genai.NewContentFromText("hello", genai.RoleModel),
+					},
+					Actions: session.EventActions{
+						StateDelta: map[string]any{"test_key": "test_value"},
+					},
+				}
+				yield(event, nil)
+			}
+		},
+		AfterAgentCallbacks: []agent.AfterAgentCallback{
+			func(c agent.CallbackContext) (*genai.Content, error) {
+				gotValue, gotErr = c.State().Get("test_key")
+				return nil, nil
+			},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	parallelAgent, err := parallelagent.New(parallelagent.Config{
+		AgentConfig: agent.Config{
+			Name:      "test_parallel_agent",
+			SubAgents: []agent.Agent{subAgent},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	sessionService := session.InMemoryService()
+	agentRunner, err := runner.New(runner.Config{
+		AppName:        "test_app",
+		Agent:          parallelAgent,
+		SessionService: sessionService,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	_, err = sessionService.Create(ctx, &session.CreateRequest{
+		AppName:   "test_app",
+		UserID:    "user_id",
+		SessionID: "session_id",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for _, err := range agentRunner.Run(ctx, "user_id", "session_id", genai.NewContentFromText("user input", genai.RoleUser), agent.RunConfig{}) {
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	if gotErr != nil {
+		t.Fatalf("expected to get value from state, got error: %v", gotErr)
+	}
+	if gotValue != "test_value" {
+		t.Fatalf("expected state value 'test_value', got %v", gotValue)
+	}
+}
