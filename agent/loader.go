@@ -16,6 +16,7 @@ package agent
 
 import (
 	"fmt"
+	"sort"
 )
 
 // Loader allows to load a particular agent by name and get the root agent
@@ -40,7 +41,8 @@ type singleLoader struct {
 }
 
 type multiAgentMapLoader struct {
-	agentMap map[string]Agent
+	agentMap    map[string]Agent
+	agentsNames []string
 }
 
 // NewSingleLoader returns a loader with only one agent, which becomes the root agent
@@ -113,18 +115,20 @@ func (m *multiLoader) RootAgent() Agent {
 // NewMultiAgentMapLoader returns a new AgentLoader with the given root Agent and other agents.
 // Returns an error if more than one agent (including root) shares the same name
 func NewMultiAgentMapLoader(agentMap map[string]Agent) (Loader, error) {
+	agentsNames := make([]string, 0, len(agentMap))
+	for name := range agentMap {
+		agentsNames = append(agentsNames, name)
+	}
+	sort.Strings(agentsNames)
 	return &multiAgentMapLoader{
-		agentMap: agentMap,
+		agentMap:    agentMap,
+		agentsNames: agentsNames,
 	}, nil
 }
 
 // multiAgentMapLoader implements AgentLoader. Returns the list of all agents' names (including root agent)
 func (m *multiAgentMapLoader) ListAgents() []string {
-	agents := make([]string, 0, len(m.agentMap))
-	for name := range m.agentMap {
-		agents = append(agents, name)
-	}
-	return agents
+	return m.agentsNames
 }
 
 // multiAgentMapLoader implements LoadAgent. Returns an agent with given name or error if no such an agent is found

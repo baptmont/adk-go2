@@ -32,7 +32,7 @@ import (
 // apiConfig contains parametres for lauching ADK REST API
 type apiConfig struct {
 	frontendAddress string
-	pathPrefix string
+	pathPrefix      string
 	sseWriteTimeout time.Duration
 }
 
@@ -77,14 +77,15 @@ func (a *apiLauncher) SetupSubrouters(router *mux.Router, config *launcher.Confi
 	// Wrap it with CORS middleware
 	corsHandler := corsWithArgs(a.config.frontendAddress)(apiHandler)
 
-	// Register it at the path prefix or default /api/ path
-	route := router.Methods("GET", "POST", "DELETE", "OPTIONS").PathPrefix(a.config.pathPrefix)
-	if a.config.pathPrefix != "" {
-		route.Handler(
-			http.StripPrefix(a.config.pathPrefix, corsHandler),
-		)
+	// If prefix is empty, don't use PathPrefix("") because it's too greedy.
+	// Instead, attach the handler to the main router directly.
+	if a.config.pathPrefix == "" || a.config.pathPrefix == "/" {
+		// This allows other routes (like /ui/) to match first if registered
+		router.Methods("GET", "POST", "DELETE", "OPTIONS").Handler(corsHandler)
 	} else {
-		route.Handler(corsHandler)
+		router.Methods("GET", "POST", "DELETE", "OPTIONS").
+			PathPrefix(a.config.pathPrefix).
+			Handler(http.StripPrefix(a.config.pathPrefix, corsHandler))
 	}
 	return nil
 }
