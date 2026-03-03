@@ -62,7 +62,7 @@ func NewToolContext(ctx agent.InvocationContext, functionCallID string, actions 
 	}
 	if actions.ArtifactDelta == nil {
 		actions.ArtifactDelta = make(map[string]int64)
-	}	
+	}
 	cbCtx := contextinternal.NewCallbackContextWithDelta(ctx, actions.StateDelta, actions.ArtifactDelta)
 
 	return &toolContext{
