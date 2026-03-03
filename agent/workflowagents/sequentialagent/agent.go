@@ -35,8 +35,7 @@ func New(cfg Config) (agent.Agent, error) {
 		return nil, fmt.Errorf("LoopAgent doesn't allow custom Run implementations")
 	}
 
-	sequentialAgentImpl := &sequentialAgent{
-	}
+	sequentialAgentImpl := &sequentialAgent{}
 	cfg.AgentConfig.Run = sequentialAgentImpl.Run
 
 	sequentialAgent, err := agent.New(cfg.AgentConfig)
@@ -61,8 +60,7 @@ type Config struct {
 	AgentConfig agent.Config
 }
 
-type sequentialAgent struct {
-}
+type sequentialAgent struct{}
 
 func (a *sequentialAgent) Run(ctx agent.InvocationContext) iter.Seq2[*session.Event, error] {
 	return func(yield func(*session.Event, error) bool) {
