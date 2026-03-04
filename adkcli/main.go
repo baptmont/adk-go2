@@ -38,7 +38,10 @@ func main() {
 	}
 
 	// Register callbacks for the conformance agents
-	RegisterCallbacks()
+	err = RegisterCallbacks()
+	if err != nil {
+		log.Fatalf("Error registering callbacks: %v", err)
+	}
 	err = RegisterFunctions()
 	if err != nil {
 		log.Fatalf("Error registering functions: %v", err)

@@ -4,7 +4,7 @@
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-//	http://www.apache.org/licenses/LICENSE-2.0
+//     http://www.apache.org/licenses/LICENSE-2.0
 //
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
@@ -238,12 +238,15 @@ func resolveSubAgents(ctx context.Context, parentPath string, refs []agentRefCon
 	return agents, nil
 }
 
+type contextKey string
+const parentPathKey contextKey = "parentPath"
+
 func resolveTools(ctx context.Context, parentPath string, toolConfigs []ToolConfig) ([]tool.Tool, []tool.Toolset, error) {
 	var tools []tool.Tool
 	var toolsets []tool.Toolset
 	for _, tc := range toolConfigs {
 		if tc.Name != "" {
-			ctx = context.WithValue(ctx, "parentPath", parentPath)
+			ctx = context.WithValue(ctx, parentPathKey, parentPath)
 			a, ts, err := ResolveToolReference(ctx, tc.Name, tc.Args)
 			if err != nil {
 				return nil, nil, fmt.Errorf("failed to resolve tool reference %s: %w", tc.Name, err)

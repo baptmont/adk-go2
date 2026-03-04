@@ -315,28 +315,49 @@ func RegisterFunctions() error {
 		return fmt.Errorf("error creating ask for approval tool: %w", err)
 	}
 
-	configurable.RegisterToolFactory("tools_agent_002.tools.validate_email", func(ctx context.Context, _ map[string]any) (tool.Tool, error) {
+	err = configurable.RegisterToolFactory("tools_agent_002.tools.validate_email", func(ctx context.Context, _ map[string]any) (tool.Tool, error) {
 		return validateEmailTool, nil
 	})
-	configurable.RegisterToolFactory("tools_agent_002.tools.get_user_id", func(ctx context.Context, _ map[string]any) (tool.Tool, error) {
+	if err != nil {
+		return fmt.Errorf("error registering validate email tool: %w", err)
+	}
+	err = configurable.RegisterToolFactory("tools_agent_002.tools.get_user_id", func(ctx context.Context, _ map[string]any) (tool.Tool, error) {
 		return getUserIDTool, nil
 	})
-	configurable.RegisterToolFactory("tools_agent_002.tools.create_booking", func(ctx context.Context, _ map[string]any) (tool.Tool, error) {
+	if err != nil {
+		return fmt.Errorf("error registering get user ID tool: %w", err)
+	}
+	err = configurable.RegisterToolFactory("tools_agent_002.tools.create_booking", func(ctx context.Context, _ map[string]any) (tool.Tool, error) {
 		return createBookingTool, nil
 	})
+	if err != nil {
+		return fmt.Errorf("error registering create booking tool: %w", err)
+	}
 
-	configurable.RegisterToolFactory("tools_agent_004.tools.search_flights", func(ctx context.Context, _ map[string]any) (tool.Tool, error) {
+	err = configurable.RegisterToolFactory("tools_agent_004.tools.search_flights", func(ctx context.Context, _ map[string]any) (tool.Tool, error) {
 		return searchFlightsTool, nil
 	})
-	configurable.RegisterToolFactory("tools_agent_004.tools.calculate_trip_cost", func(ctx context.Context, _ map[string]any) (tool.Tool, error) {
+	if err != nil {
+		return fmt.Errorf("error registering search flights tool: %w", err)
+	}
+	err = configurable.RegisterToolFactory("tools_agent_004.tools.calculate_trip_cost", func(ctx context.Context, _ map[string]any) (tool.Tool, error) {
 		return calculateTripCostTool, nil
 	})
+	if err != nil {
+		return fmt.Errorf("error registering calculate trip cost tool: %w", err)
+	}
 
-	configurable.RegisterToolFactory("tools_agent_009.tools.reimburse", func(ctx context.Context, _ map[string]any) (tool.Tool, error) {
+	err = configurable.RegisterToolFactory("tools_agent_009.tools.reimburse", func(ctx context.Context, _ map[string]any) (tool.Tool, error) {
 		return reimburseTool, nil
 	})
-	configurable.RegisterToolFactory("tools_agent_009.tools.ask_for_approval", func(ctx context.Context, _ map[string]any) (tool.Tool, error) {
+	if err != nil {
+		return fmt.Errorf("error registering reimburse tool: %w", err)
+	}
+	err = configurable.RegisterToolFactory("tools_agent_009.tools.ask_for_approval", func(ctx context.Context, _ map[string]any) (tool.Tool, error) {
 		return askForApprovalTool, nil
 	})
+	if err != nil {
+		return fmt.Errorf("error registering ask for approval tool: %w", err)
+	}
 	return nil
 }

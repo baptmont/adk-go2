@@ -55,25 +55,49 @@ var (
 )
 
 func init() {
-	Register("LlmAgent", newLLMAgent)
-	Register("LoopAgent", newLoopAgent)
-	Register("ParallelAgent", newParallelAgent)
-	Register("SequentialAgent", newSequentialAgent)
-	RegisterToolFactory("exit_loop", func(_ context.Context, _ map[string]any) (tool.Tool, error) {
+	err := Register("LlmAgent", newLLMAgent)
+	if err != nil {
+		panic(err)
+	}
+	err = Register("LoopAgent", newLoopAgent)
+	if err != nil {
+		panic(err)
+	}
+	err = Register("ParallelAgent", newParallelAgent)
+	if err != nil {
+		panic(err)
+	}
+	err = Register("SequentialAgent", newSequentialAgent)
+	if err != nil {
+		panic(err)
+	}
+	err = RegisterToolFactory("exit_loop", func(_ context.Context, _ map[string]any) (tool.Tool, error) {
 		return exitlooptool.New()
 	})
-	RegisterToolFactory("google_search", func(_ context.Context, _ map[string]any) (tool.Tool, error) {
+	if err != nil {
+		panic(err)
+	}
+	err = RegisterToolFactory("google_search", func(_ context.Context, _ map[string]any) (tool.Tool, error) {
 		return geminitool.GoogleSearch{}, nil
 	})
-	RegisterToolFactory("url_context", func(_ context.Context, _ map[string]any) (tool.Tool, error) {
+	if err != nil {
+		panic(err)
+	}
+	err = RegisterToolFactory("url_context", func(_ context.Context, _ map[string]any) (tool.Tool, error) {
 		// TODO: return geminitool.New("url_context", "url context", &genai.Tool{URLContext: &genai.URLContext{}}), nil
 		return geminitool.New("url_context", &genai.Tool{URLContext: &genai.URLContext{}}), nil
 	})
-	RegisterToolFactory("google_maps_grounding", func(_ context.Context, _ map[string]any) (tool.Tool, error) {
+	if err != nil {
+		panic(err)
+	}
+	err = RegisterToolFactory("google_maps_grounding", func(_ context.Context, _ map[string]any) (tool.Tool, error) {
 		// TODO: return geminitool.New("google_maps_grounding", "google maps grounding", &genai.Tool{GoogleMaps: &genai.GoogleMaps{}}), nil
 		return geminitool.New("google_maps_grounding", &genai.Tool{GoogleMaps: &genai.GoogleMaps{}}), nil
 	})
-	RegisterToolFactory("AgentTool", func(ctx context.Context, args map[string]any) (tool.Tool, error) {
+	if err != nil {
+		panic(err)
+	}
+	err = RegisterToolFactory("AgentTool", func(ctx context.Context, args map[string]any) (tool.Tool, error) {
 		if args == nil {
 			return nil, fmt.Errorf("args is nil")
 		}
@@ -85,7 +109,7 @@ func init() {
 		if ss, ok := a["skip_summarization"].(bool); ok {
 			skipSummarization = ss
 		}
-		parentPath := ctx.Value("parentPath").(string)
+		parentPath := ctx.Value(parentPathKey).(string)
 		if configPath, ok := a["config_path"].(string); ok {
 			ag, err := ResolveAgentReference(ctx, parentPath, configPath)
 			if err != nil {
@@ -96,7 +120,10 @@ func init() {
 			return nil, fmt.Errorf("config_path not found in args")
 		}
 	})
-	RegisterToolFactory("LongRunningFunctionTool", func(ctx context.Context, args map[string]any) (tool.Tool, error) {
+	if err != nil {
+		panic(err)
+	}
+	err = RegisterToolFactory("LongRunningFunctionTool", func(ctx context.Context, args map[string]any) (tool.Tool, error) {
 		if args == nil {
 			return nil, fmt.Errorf("args is nil")
 		}
@@ -113,8 +140,11 @@ func init() {
 		}
 		return tool, nil
 	})
+	if err != nil {
+		panic(err)
+	}
 	// TODO: ExampleTool
-	RegisterToolsetFactory("McpToolset", func(ctx context.Context, args map[string]any) (tool.Toolset, error) {
+	err = RegisterToolsetFactory("McpToolset", func(ctx context.Context, args map[string]any) (tool.Toolset, error) {
 		stdioConnectionParams, ok := args["stdio_connection_params"].(map[string]any)
 		if !ok {
 			return nil, fmt.Errorf("stdio_connection_params not found in args")
@@ -155,6 +185,9 @@ func init() {
 		}
 		return mcpSet, nil
 	})
+	if err != nil {
+		panic(err)
+	}
 }
 
 // Register allows concrete implementations to add themselves to the system.
