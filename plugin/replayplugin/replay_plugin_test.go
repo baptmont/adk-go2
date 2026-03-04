@@ -69,17 +69,20 @@ recordings:
 		createRecordingsFile(t, tempDir, recordingsYaml)
 
 		// 2. Setup replay config
-		mockSession.State().Set("_adk_replay_config", map[string]any{
+		err := mockSession.State().Set("_adk_replay_config", map[string]any{
 			"dir":                tempDir,
 			"user_message_index": 0,
 		})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
 
 		// 3. Load recordings (BeforeRunCallback)
 		invContext := &MockInvocationContext{
 			session:      mockSession,
 			invocationID: "test-invocation",
 		}
-		_, err := plugin.BeforeRunCallback()(invContext)
+		_, err = plugin.BeforeRunCallback()(invContext)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -138,17 +141,20 @@ recordings:
 		createRecordingsFile(t, tempDir, recordingsYaml)
 
 		// 2. Setup config
-		mockSession.State().Set("_adk_replay_config", map[string]any{
+		err := mockSession.State().Set("_adk_replay_config", map[string]any{
 			"dir":                tempDir,
 			"user_message_index": 0,
 		})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
 
 		// 3. Load recordings
 		invContext := &MockInvocationContext{
 			session:      mockSession,
 			invocationID: "test-invocation",
 		}
-		_, err := plugin.BeforeRunCallback()(invContext)
+		_, err = plugin.BeforeRunCallback()(invContext)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -204,17 +210,20 @@ recordings:
 		createRecordingsFile(t, tempDir, recordingsYaml)
 
 		// 2. Setup config
-		mockSession.State().Set("_adk_replay_config", map[string]any{
+		err := mockSession.State().Set("_adk_replay_config", map[string]any{
 			"dir":                tempDir,
 			"user_message_index": 0,
 		})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
 
 		// 3. Load recordings
 		invContext := &MockInvocationContext{
 			session:      mockSession,
 			invocationID: "test-invocation",
 		}
-		_, err := plugin.BeforeRunCallback()(invContext)
+		_, err = plugin.BeforeRunCallback()(invContext)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -261,12 +270,15 @@ recordings:
 `
 		createRecordingsFile(t, tempDir, recordingsYaml)
 
-		mockSession.State().Set("_adk_replay_config", map[string]any{
+		err := mockSession.State().Set("_adk_replay_config", map[string]any{
 			"dir":                tempDir,
 			"user_message_index": 0,
 		})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
 		invContext := &MockInvocationContext{session: mockSession, invocationID: "test-invocation"}
-		_, err := plugin.BeforeRunCallback()(invContext)
+		_, err = plugin.BeforeRunCallback()(invContext)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -306,12 +318,15 @@ recordings:
 `
 		createRecordingsFile(t, tempDir, recordingsYaml)
 
-		mockSession.State().Set("_adk_replay_config", map[string]any{
+		err := mockSession.State().Set("_adk_replay_config", map[string]any{
 			"dir":                tempDir,
 			"user_message_index": 0,
 		})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
 		invContext := &MockInvocationContext{session: mockSession, invocationID: "test-invocation"}
-		_, err := plugin.BeforeRunCallback()(invContext)
+		_, err = plugin.BeforeRunCallback()(invContext)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}

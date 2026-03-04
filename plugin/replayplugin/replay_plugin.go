@@ -38,11 +38,6 @@ import (
 
 // New creates an instance of the logging plugin.
 //
-// This plugin helps print all critical events in the console. It is not a
-// replacement of existing logging in ADK. It rather helps terminal based
-// debugging by showing all logs in the console, and serves as a simple demo for
-// everyone to leverage when developing new plugins.
-//
 // This plugin helps users track the invocation status by logging:
 // - User messages and invocation context
 // - Agent execution flow
@@ -86,7 +81,10 @@ func (p *replayPlugin) beforeRun(ctx agent.InvocationContext) (*genai.Content, e
 		return nil, nil
 	}
 
-	p.loadInvocationState(ctx)
+	_, err := p.loadInvocationState(ctx)
+	if err != nil {
+		return nil, err
+	}
 	return nil, nil
 }
 
@@ -97,14 +95,12 @@ func (p *replayPlugin) beforeModel(ctx agent.CallbackContext, req *model.LLMRequ
 
 	invocationState, err := p.getInvocationState(ctx)
 	if err != nil {
-		fmt.Println("Replay state not initialized1: %w", err)
 		return nil, err
 	}
 
 	agentName := ctx.AgentName()
 	recording, err := p.verifyAndGetNextLLMRecordingForAgent(invocationState, agentName, req)
 	if err != nil {
-		fmt.Println("Replay state not initialized2: %w", err)
 		return nil, err
 	}
 
@@ -184,7 +180,7 @@ func (p *replayPlugin) getInvocationState(ctx agent.CallbackContext) (*invocatio
 	invocationID := ctx.InvocationID()
 	state, ok := p.invocationStates[invocationID]
 	if !ok {
-		return nil, fmt.Errorf("Replay state not initialized. Ensure before_run created it.")
+		return nil, fmt.Errorf("replay state not initialized. ensure before_run created it")
 	}
 	return state, nil
 }
@@ -229,21 +225,18 @@ func (p *replayPlugin) loadInvocationState(ctx agent.InvocationContext) (*invoca
 
 	// Check if file exists
 	if _, err := os.Stat(recordingsPath); os.IsNotExist(err) {
-		fmt.Printf("Failed to read recordings file from %s: %v\n", recordingsPath, err)
 		return nil, fmt.Errorf("replay config error: recordings file not found: %s", recordingsPath)
 	}
 
 	// Read file
 	data, err := os.ReadFile(recordingsPath)
 	if err != nil {
-		fmt.Printf("Failed to read recordings file from %s: %v\n", recordingsPath, err)
 		return nil, fmt.Errorf("failed to read recordings file: %w", err)
 	}
 
 	// Parse YAML
 	var recordings recording.Recordings
 	if err := yaml.Unmarshal(data, &recordings); err != nil {
-		fmt.Printf("Failed to parse recordings from %s: %v\n", recordingsPath, err)
 		return nil, fmt.Errorf("failed to parse recordings from %s: %w", recordingsPath, err)
 	}
 
@@ -286,9 +279,7 @@ func getNextRecordingForAgent(state *invocationReplayState, agentName string) (*
 
 	// Check if we have enough recordings for this agent
 	if currentAgentIndex >= len(agentRecordings) {
-		// jsonBytes, _ := json.MarshalIndent(agentRecordings[currentAgentIndex-1], "", "  ")
-		// fmt.Printf("Agent recordings:\n%s\n", string(jsonBytes))
-		return nil, fmt.Errorf("Runtime sent more requests than expected for agent '%s' at user_message_index %d. Expected %d, but got request at index %d",
+		return nil, fmt.Errorf("runtime sent more requests than expected for agent '%s' at user_message_index %d. Expected %d, but got request at index %d",
 			agentName, state.userMessageIndex, len(agentRecordings), currentAgentIndex)
 	}
 
@@ -323,7 +314,7 @@ func (p *replayPlugin) verifyAndGetNextLLMRecordingForAgent(state *invocationRep
 	}
 
 	if expectedRecording.LLMRecording == nil {
-		return nil, fmt.Errorf("Expected LLM recording for agent '%s' at index %d, but found tool recording", agentName, currentAgentIndex)
+		return nil, fmt.Errorf("expected LLM recording for agent '%s' at index %d, but found tool recording", agentName, currentAgentIndex)
 	}
 
 	// Strict verification of LLM request
@@ -347,7 +338,7 @@ func verifyLLMRequestMatch(expectedLLMRequest, actualLLMRequest *model.LLMReques
 	// Compare!
 	// cmp.Diff returns an empty string if they are equal, otherwise a human-readable diff.
 	if diff := cmp.Diff(expectedLLMRequest, actualLLMRequest, opts...); diff != "" {
-		return fmt.Errorf("LLM request mismatch for agent '%s' (index %d):\n%s",
+		return fmt.Errorf("llm request mismatch for agent '%s' (index %d):\n%s",
 			agentName, agentIndex, diff)
 	}
 
@@ -365,7 +356,7 @@ func (p *replayPlugin) verifyAndGetNextToolRecordingForAgent(state *invocationRe
 	}
 
 	if expectedRecording.ToolRecording == nil {
-		return nil, fmt.Errorf("Expected tool recording for agent '%s' at index %d, but found LLM recording", agentName, currentAgentIndex)
+		return nil, fmt.Errorf("expected tool recording for agent '%s' at index %d, but found LLM recording", agentName, currentAgentIndex)
 	}
 
 	// Strict verification of tool call
@@ -379,12 +370,12 @@ func (p *replayPlugin) verifyAndGetNextToolRecordingForAgent(state *invocationRe
 
 func verifyToolCallMatch(expectedToolCall *genai.FunctionCall, toolName string, toolArgs map[string]any, agentName string, agentIndex int) error {
 	if expectedToolCall.Name != toolName {
-		return fmt.Errorf("Tool name mismatch for agent '%s' (index %d): expected '%s', got '%s'",
+		return fmt.Errorf("tool name mismatch for agent '%s' (index %d): expected '%s', got '%s'",
 			agentName, agentIndex, expectedToolCall.Name, toolName)
 	}
 
 	if diff := cmp.Diff(expectedToolCall.Args, toolArgs); diff != "" {
-		return fmt.Errorf("Tool args mismatch for agent '%s' (index %d):\n%s",
+		return fmt.Errorf("tool args mismatch for agent '%s' (index %d):\n%s",
 			agentName, agentIndex, diff)
 	}
 
