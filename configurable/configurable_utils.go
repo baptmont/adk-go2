@@ -313,7 +313,7 @@ func ResolveCallbackReference(ctx context.Context, callbackName string) (any, er
 }
 
 // ResolveAgentReference builds an agent from a reference config.
-func ResolveAgentReference(ctx context.Context, parentPath string, refPath string) (agent.Agent, error) {
+func ResolveAgentReference(ctx context.Context, parentPath, refPath string) (agent.Agent, error) {
 	if refPath == "" {
 		return nil, fmt.Errorf("agent reference path cannot be empty")
 	}

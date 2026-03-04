@@ -239,6 +239,7 @@ func resolveSubAgents(ctx context.Context, parentPath string, refs []agentRefCon
 }
 
 type contextKey string
+
 const parentPathKey contextKey = "parentPath"
 
 func resolveTools(ctx context.Context, parentPath string, toolConfigs []ToolConfig) ([]tool.Tool, []tool.Toolset, error) {
