@@ -470,7 +470,7 @@ func TestReplayPlugin_PathValidation(t *testing.T) {
 	// Create a temporary directory structure for testing path validation
 	tempDir := t.TempDir()
 	safeDir := filepath.Join(tempDir, "safe")
-	if err := os.Mkdir(safeDir, 0755); err != nil {
+	if err := os.Mkdir(safeDir, 0o755); err != nil {
 		t.Fatalf("failed to create safe dir: %v", err)
 	}
 
