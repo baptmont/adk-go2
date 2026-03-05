@@ -14,6 +14,22 @@
 
 package replayplugin
 
+// Package replayplugin provides an ADK plugin for replaying recorded LLM and tool interactions.
+//
+// This plugin is primarily used for conformance testing, allowing deterministic execution
+// of agents by mocking LLM responses and tool outputs based on a pre-recorded session.
+//
+// The plugin operates by intercepting:
+//   - BeforeRun: To initialize replay state from configuration.
+//   - BeforeModel: To match LLM requests against recordings and return mock responses.
+//   - BeforeTool: To match tool calls against recordings and return mock outputs.
+//   - AfterRun: To clean up invocation state.
+//
+// Replay configuration is expected in the session state under the key "_adk_replay_config",
+// containing:
+//   - "dir": Path to the directory containing "generated-recordings.yaml".
+//   - "user_message_index": The index of the user message to replay.
+
 import (
 	"fmt"
 	"os"
@@ -28,23 +44,18 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"google.golang.org/adk/agent"
+	"google.golang.org/adk/internal/configurable/conformance/replayplugin/recording"
 	"google.golang.org/adk/internal/toolinternal"
 	"google.golang.org/adk/model"
 	"google.golang.org/adk/plugin"
-	"google.golang.org/adk/plugin/replayplugin/recording"
 	"google.golang.org/adk/session"
 	"google.golang.org/adk/tool"
 )
 
-// New creates an instance of the logging plugin.
+// New creates an instance of the replay plugin.
 //
-// This plugin helps users track the invocation status by logging:
-// - User messages and invocation context
-// - Agent execution flow
-// - LLM requests and responses
-// - Tool calls with arguments and results
-// - Events and final responses
-// - Errors during model and tool execution
+// allowedBaseDir specifies the root directory from which recordings can be loaded.
+// Attempts to load recordings from outside this directory will result in an error.
 func New(allowedBaseDir string) (*plugin.Plugin, error) {
 	p := &replayPlugin{
 		invocationStates: make(map[string]*invocationReplayState),
@@ -74,6 +85,7 @@ type replayPlugin struct {
 	allowedBaseDir   string
 }
 
+// beforeRun initializes the replay state for the current invocation if replay mode is enabled.
 func (p *replayPlugin) beforeRun(ctx agent.InvocationContext) (*genai.Content, error) {
 	if ctx.Session() == nil {
 		return nil, nil
@@ -94,6 +106,7 @@ func (p *replayPlugin) beforeRun(ctx agent.InvocationContext) (*genai.Content, e
 	return nil, nil
 }
 
+// beforeModel intercepts LLM requests, verifies them against the recording, and returns the recorded response.
 func (p *replayPlugin) beforeModel(ctx agent.CallbackContext, req *model.LLMRequest) (*model.LLMResponse, error) {
 	on, err := p.isReplayModeOn(ctx.State())
 	if err != nil {
@@ -117,6 +130,7 @@ func (p *replayPlugin) beforeModel(ctx agent.CallbackContext, req *model.LLMRequ
 	return recording.LLMResponse.ToLLMResponse(), nil
 }
 
+// beforeTool intercepts tool calls, verifies them against the recording, and returns the recorded response.
 func (p *replayPlugin) beforeTool(ctx tool.Context, t tool.Tool, args map[string]any) (map[string]any, error) {
 	on, err := p.isReplayModeOn(ctx.State())
 	if err != nil {
@@ -150,6 +164,7 @@ func (p *replayPlugin) beforeTool(ctx tool.Context, t tool.Tool, args map[string
 	return recording.ToolResponse.Response, nil
 }
 
+// afterRun cleans up the invocation state.
 func (p *replayPlugin) afterRun(ctx agent.InvocationContext) {
 	if ctx.Session() == nil {
 		return
@@ -164,6 +179,7 @@ func (p *replayPlugin) afterRun(ctx agent.InvocationContext) {
 	p.mu.Unlock()
 }
 
+// isReplayModeOn checks if replay mode is enabled in the session state and validates the configuration.
 func (p *replayPlugin) isReplayModeOn(sessionState session.State) (bool, error) {
 	if sessionState == nil {
 		return false, nil
@@ -212,6 +228,7 @@ func (p *replayPlugin) isReplayModeOn(sessionState session.State) (bool, error) 
 	return true, nil
 }
 
+// getInvocationState retrieves the replay state for the current invocation.
 func (p *replayPlugin) getInvocationState(ctx agent.CallbackContext) (*invocationReplayState, error) {
 	invocationID := ctx.InvocationID()
 	state, ok := p.invocationStates[invocationID]
@@ -221,6 +238,7 @@ func (p *replayPlugin) getInvocationState(ctx agent.CallbackContext) (*invocatio
 	return state, nil
 }
 
+// loadInvocationState loads the recordings and initializes the replay state for the invocation.
 func (p *replayPlugin) loadInvocationState(ctx agent.InvocationContext) (*invocationReplayState, error) {
 	invocationID := ctx.InvocationID()
 
@@ -314,6 +332,8 @@ func (p *replayPlugin) loadInvocationState(ctx agent.InvocationContext) (*invoca
 	return state, nil
 }
 
+// getNextRecordingForAgent retrieves the next expected recording for the given agent.
+// It enforces ordering of events within the user message turn to ensure deterministic replay.
 func getNextRecordingForAgent(state *invocationReplayState, agentName string) (*recording.Recording, error) {
 	// Get current agent index
 	currentAgentIndex, ok := state.GetAgentReplayIndex(agentName)
@@ -355,6 +375,7 @@ func getNextRecordingForAgent(state *invocationReplayState, agentName string) (*
 	return expectedRecording, nil
 }
 
+// verifyAndGetNextLLMRecordingForAgent ensures the next recording is an LLM request and matches the actual request.
 func (p *replayPlugin) verifyAndGetNextLLMRecordingForAgent(state *invocationReplayState, agentName string, llmRequest *model.LLMRequest) (*recording.LLMRecording, error) {
 	currentAgentIndex, ok := state.GetAgentReplayIndex(agentName)
 	if !ok {
@@ -378,6 +399,7 @@ func (p *replayPlugin) verifyAndGetNextLLMRecordingForAgent(state *invocationRep
 	return expectedRecording.LLMRecording, nil
 }
 
+// verifyLLMRequestMatch compares the expected LLM request from recording with the actual request.
 func verifyLLMRequestMatch(expectedLLMRequest, actualLLMRequest *model.LLMRequest, agentName string, agentIndex int) error {
 	// Define options to ignore specific fields.
 	opts := []cmp.Option{
@@ -397,6 +419,7 @@ func verifyLLMRequestMatch(expectedLLMRequest, actualLLMRequest *model.LLMReques
 	return nil
 }
 
+// verifyAndGetNextToolRecordingForAgent ensures the next recording is a tool call and matches the actual call.
 func (p *replayPlugin) verifyAndGetNextToolRecordingForAgent(state *invocationReplayState, agentName string, t tool.Tool, args map[string]any) (*recording.ToolRecording, error) {
 	currentAgentIndex, ok := state.GetAgentReplayIndex(agentName)
 	if !ok {
@@ -420,6 +443,7 @@ func (p *replayPlugin) verifyAndGetNextToolRecordingForAgent(state *invocationRe
 	return expectedRecording.ToolRecording, nil
 }
 
+// verifyToolCallMatch compares the expected tool call from recording with the actual tool call.
 func verifyToolCallMatch(expectedToolCall *genai.FunctionCall, toolName string, toolArgs map[string]any, agentName string, agentIndex int) error {
 	if expectedToolCall.Name != toolName {
 		return fmt.Errorf("tool name mismatch for agent '%s' (index %d): expected '%s', got '%s'",

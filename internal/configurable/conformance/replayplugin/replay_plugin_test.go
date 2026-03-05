@@ -25,10 +25,10 @@ import (
 	"google.golang.org/genai"
 
 	"google.golang.org/adk/agent"
+	"google.golang.org/adk/internal/configurable/conformance/replayplugin"
 	"google.golang.org/adk/memory"
 	"google.golang.org/adk/model"
 	"google.golang.org/adk/plugin"
-	"google.golang.org/adk/plugin/replayplugin"
 	"google.golang.org/adk/session"
 	"google.golang.org/adk/tool/toolconfirmation"
 )
