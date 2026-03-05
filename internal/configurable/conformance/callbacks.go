@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package main
+package conformance
 
 import (
 	"errors"
@@ -21,7 +21,7 @@ import (
 	"google.golang.org/genai"
 
 	"google.golang.org/adk/agent"
-	"google.golang.org/adk/configurable"
+	"google.golang.org/adk/internal/configurable"
 	"google.golang.org/adk/session"
 )
 

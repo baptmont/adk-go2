@@ -25,7 +25,8 @@ import (
 	"google.golang.org/adk/agent"
 	"google.golang.org/adk/cmd/launcher"
 	"google.golang.org/adk/cmd/launcher/full"
-	"google.golang.org/adk/configurable"
+	"google.golang.org/adk/internal/configurable"
+	"google.golang.org/adk/internal/configurable/conformance"
 	"google.golang.org/adk/plugin"
 	"google.golang.org/adk/runner"
 )
@@ -38,11 +39,11 @@ func main() {
 	}
 
 	// Register callbacks for the conformance agents
-	err = RegisterCallbacks()
+	err = conformance.RegisterCallbacks()
 	if err != nil {
 		log.Fatalf("Error registering callbacks: %v", err)
 	}
-	err = RegisterFunctions()
+	err = conformance.RegisterFunctions()
 	if err != nil {
 		log.Fatalf("Error registering functions: %v", err)
 	}
