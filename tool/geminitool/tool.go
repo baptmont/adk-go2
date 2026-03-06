@@ -39,7 +39,7 @@ import (
 )
 
 // New creates  gemini API tool.
-func New(name string, description string, t *genai.Tool) tool.Tool {
+func New(name, description string, t *genai.Tool) tool.Tool {
 	return &geminiTool{
 		name:        name,
 		description: description,
