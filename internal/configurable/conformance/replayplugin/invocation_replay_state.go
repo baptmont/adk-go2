@@ -73,17 +73,3 @@ func (s *invocationReplayState) GetAgentReplayIndex(agentName string) (int, bool
 	val, ok := s.agentReplayIndices[agentName]
 	return val, ok
 }
-
-// IncrementAgentReplayIndex increments the replay index for a specific agent.
-func (s *invocationReplayState) IncrementAgentReplayIndex(agentName string) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.agentReplayIndices[agentName]++
-}
-
-// IncrementCurrentIndex increments the current index.
-func (s *invocationReplayState) IncrementCurrentIndex() {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.curIndex++
-}
