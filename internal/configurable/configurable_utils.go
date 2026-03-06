@@ -55,23 +55,19 @@ var (
 )
 
 func init() {
-	err := Register("LlmAgent", newLLMAgent)
-	if err != nil {
+	if err := Register("LlmAgent", newLLMAgent); err != nil {
 		panic(err)
 	}
-	err = Register("LoopAgent", newLoopAgent)
-	if err != nil {
+	if err := Register("LoopAgent", newLoopAgent); err != nil {
 		panic(err)
 	}
-	err = Register("ParallelAgent", newParallelAgent)
-	if err != nil {
+	if err := Register("ParallelAgent", newParallelAgent); err != nil {
 		panic(err)
 	}
-	err = Register("SequentialAgent", newSequentialAgent)
-	if err != nil {
+	if err := Register("SequentialAgent", newSequentialAgent); err != nil {
 		panic(err)
 	}
-	err = RegisterToolFactory("exit_loop", func(_ context.Context, _ map[string]any) (tool.Tool, error) {
+	err := RegisterToolFactory("exit_loop", func(_ context.Context, _ map[string]any) (tool.Tool, error) {
 		return exitlooptool.New()
 	})
 	if err != nil {
