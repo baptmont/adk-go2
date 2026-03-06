@@ -1,4 +1,4 @@
-// Copyright 2025 Google LLC
+// Copyright 2026 Google LLC
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -12,7 +12,20 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package version
+package llminternal
 
-// Version exposes the current ADK Go version, used for llm request tagging
-const Version = "0.6.0"
+import (
+	"google.golang.org/adk/agent"
+)
+
+// mockLLMAgent satisfies both agent.Agent (via embedding) and llminternal.Agent (via internal() implementation)
+type mockLLMAgent struct {
+	agent.Agent
+	s *State
+}
+
+var _ Agent = (*mockLLMAgent)(nil)
+
+func (m *mockLLMAgent) internal() *State {
+	return m.s
+}
