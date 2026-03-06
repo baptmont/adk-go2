@@ -144,7 +144,7 @@ func TestNewLoopAgent(t *testing.T) {
 						Content: genai.NewContentFromFunctionResponse("exampleFunction", make(map[string]any), genai.RoleUser),
 					},
 					Actions: session.EventActions{
-						Escalate: true,
+						Escalate:      true,
 						StateDelta:    map[string]any{},
 						ArtifactDelta: map[string]int64{},
 					},

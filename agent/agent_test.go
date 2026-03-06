@@ -37,7 +37,6 @@ func TestAgentCallbacks(t *testing.T) {
 		wantLLMCalls int
 		wantEvents   []*session.Event
 	}{
-
 		{
 			name: "before agent callback runs, no llm calls",
 			beforeAgent: []BeforeAgentCallback{
