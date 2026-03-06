@@ -37,6 +37,7 @@ func TestAgentCallbacks(t *testing.T) {
 		wantLLMCalls int
 		wantEvents   []*session.Event
 	}{
+
 		{
 			name: "before agent callback runs, no llm calls",
 			beforeAgent: []BeforeAgentCallback{
@@ -49,6 +50,10 @@ func TestAgentCallbacks(t *testing.T) {
 					Author: "test",
 					LLMResponse: model.LLMResponse{
 						Content: genai.NewContentFromText("hello from before_agent_callback", genai.RoleModel),
+					},
+					Actions: session.EventActions{
+						StateDelta:    map[string]any{},
+						ArtifactDelta: map[string]int64{},
 					},
 				},
 			},
@@ -95,6 +100,10 @@ func TestAgentCallbacks(t *testing.T) {
 					LLMResponse: model.LLMResponse{
 						Content: genai.NewContentFromText("hello from after_agent_callback", genai.RoleModel),
 					},
+					Actions: session.EventActions{
+						StateDelta:    map[string]any{},
+						ArtifactDelta: map[string]int64{},
+					},
 				},
 			},
 		},
@@ -136,8 +145,7 @@ func TestAgentCallbacks(t *testing.T) {
 			}
 
 			for i, gotEvent := range gotEvents {
-				if diff := cmp.Diff(tt.wantEvents[i], gotEvent, cmpopts.IgnoreFields(session.Event{}, "ID", "Timestamp", "InvocationID"),
-					cmpopts.IgnoreFields(session.EventActions{}, "StateDelta", "ArtifactDelta")); diff != "" {
+				if diff := cmp.Diff(tt.wantEvents[i], gotEvent, cmpopts.IgnoreFields(session.Event{}, "ID", "Timestamp", "InvocationID")); diff != "" {
 					t.Errorf("diff in the events: got event[%d]: %v, want: %v, diff: %v", i, gotEvent, tt.wantEvents[i], diff)
 				}
 			}

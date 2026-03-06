@@ -63,6 +63,7 @@ func TestNewLoopAgent(t *testing.T) {
 							Role: genai.RoleModel,
 						},
 					},
+					Actions: session.EventActions{},
 				},
 			},
 		},
@@ -83,6 +84,7 @@ func TestNewLoopAgent(t *testing.T) {
 							Role: genai.RoleModel,
 						},
 					},
+					Actions: session.EventActions{},
 				},
 			},
 		},
@@ -103,6 +105,7 @@ func TestNewLoopAgent(t *testing.T) {
 							Role: genai.RoleModel,
 						},
 					},
+					Actions: session.EventActions{},
 				},
 				{
 					Author: "custom_agent_1",
@@ -114,6 +117,7 @@ func TestNewLoopAgent(t *testing.T) {
 							Role: genai.RoleModel,
 						},
 					},
+					Actions: session.EventActions{},
 				},
 			},
 		},
@@ -129,6 +133,10 @@ func TestNewLoopAgent(t *testing.T) {
 					LLMResponse: model.LLMResponse{
 						Content: genai.NewContentFromFunctionCall("exampleFunction", make(map[string]any), genai.RoleModel),
 					},
+					Actions: session.EventActions{
+						StateDelta:    map[string]any{},
+						ArtifactDelta: map[string]int64{},
+					},
 				},
 				{
 					Author: "custom_agent_0",
@@ -137,6 +145,8 @@ func TestNewLoopAgent(t *testing.T) {
 					},
 					Actions: session.EventActions{
 						Escalate: true,
+						StateDelta:    map[string]any{},
+						ArtifactDelta: map[string]int64{},
 					},
 				},
 				{
@@ -148,6 +158,10 @@ func TestNewLoopAgent(t *testing.T) {
 							},
 							Role: genai.RoleModel,
 						},
+					},
+					Actions: session.EventActions{
+						StateDelta:    map[string]any{},
+						ArtifactDelta: map[string]int64{},
 					},
 				},
 			},
@@ -164,6 +178,10 @@ func TestNewLoopAgent(t *testing.T) {
 					LLMResponse: model.LLMResponse{
 						Content: genai.NewContentFromFunctionCall("exampleFunction", make(map[string]any), genai.RoleModel),
 					},
+					Actions: session.EventActions{
+						StateDelta:    map[string]any{},
+						ArtifactDelta: map[string]int64{},
+					},
 				},
 				{
 					Author: "custom_agent_0",
@@ -173,6 +191,8 @@ func TestNewLoopAgent(t *testing.T) {
 					Actions: session.EventActions{
 						Escalate:          true,
 						SkipSummarization: true,
+						StateDelta:        map[string]any{},
+						ArtifactDelta:     map[string]int64{},
 					},
 				},
 			},
@@ -234,7 +254,6 @@ func TestNewLoopAgent(t *testing.T) {
 
 			ignoreFields := []cmp.Option{
 				cmpopts.IgnoreFields(session.Event{}, "ID", "InvocationID", "Timestamp"),
-				cmpopts.IgnoreFields(session.EventActions{}, "StateDelta", "ArtifactDelta"),
 				cmpopts.IgnoreFields(genai.FunctionCall{}, "ID"),
 				cmpopts.IgnoreFields(genai.FunctionResponse{}, "ID"),
 			}
