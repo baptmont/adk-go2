@@ -102,7 +102,7 @@ func main() {
 
 	ctx := context.Background()
 
-	loader, err := agent.NewMultiAgentMapLoader(agentsMap)
+	loader, err := conformance.NewConformanceAgentLoader(agentsMap)
 	if err != nil {
 		log.Fatalf("Error loading agent: %v", err)
 	}
