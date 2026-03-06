@@ -15,9 +15,11 @@
 package replayplugin
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -286,8 +288,6 @@ func getNextRecordingForAgent(state *invocationReplayState, agentName string) (*
 
 	// Check if we have enough recordings for this agent
 	if currentAgentIndex >= len(agentRecordings) {
-		//jsonBytes, _ := json.MarshalIndent(agentRecordings[currentAgentIndex-1], "", "  ")
-		//fmt.Printf("Agent recordings:\n%s\n", string(jsonBytes))
 		return nil, fmt.Errorf("Runtime sent more requests than expected for agent '%s' at user_message_index %d. Expected %d, but got request at index %d",
 			agentName, state.userMessageIndex, len(agentRecordings), currentAgentIndex)
 	}
@@ -302,7 +302,7 @@ func getNextRecordingForAgent(state *invocationReplayState, agentName string) (*
 		state.cond.Wait()
 		time.Sleep(1 * time.Second)
 	}
-	
+
 	state.agentReplayIndices[agentName]++
 	state.curIndex++
 
@@ -347,11 +347,70 @@ func verifyLLMRequestMatch(expectedLLMRequest, actualLLMRequest *model.LLMReques
 	// Compare!
 	// cmp.Diff returns an empty string if they are equal, otherwise a human-readable diff.
 	if diff := cmp.Diff(expectedLLMRequest, actualLLMRequest, opts...); diff != "" {
-		return fmt.Errorf("LLM request mismatch for agent '%s' (index %d):\n%s",
-			agentName, agentIndex, diff)
+		for _, content := range expectedLLMRequest.Contents {
+			for _, part := range content.Parts {
+				if part.Text != "" {
+					part.Text = modifyString(part.Text)
+				}
+			}
+		}
+
+		if diff := cmp.Diff(expectedLLMRequest, actualLLMRequest, opts...); diff != "" {
+			return fmt.Errorf("LLM request mismatch for agent '%s' (index %d):\n%s",
+				agentName, agentIndex, diff)
+		}
 	}
 
 	return nil
+}
+
+var (
+	// Matches either "parameters: " or "result: " followed by a JSON-like object/array
+	dataBlockRegex = regexp.MustCompile(`(?i)(parameters|result):\s*([\{\[].*[\}\]])`)
+	// Matches 'key' or 'value' but ignores apostrophes inside words like O'Malley
+	quoteRegex = regexp.MustCompile(`'([^']*)'`)
+	// Matches Python/Pseudo-JSON constants specifically as values
+	nullRegex = regexp.MustCompile(`\bNone\b`)
+	boolRegex = regexp.MustCompile(`\b(True|False)\b`)
+)
+
+func modifyString(input string) string {
+	// We use ReplaceAllStringFunc to process ONLY the captured data parts
+	return dataBlockRegex.ReplaceAllStringFunc(input, func(fullMatch string) string {
+		// Split label (e.g., "parameters:") from the data (e.g., "{'a': 1}")
+		parts := dataBlockRegex.FindStringSubmatch(fullMatch)
+		if len(parts) < 3 {
+			return fullMatch
+		}
+
+		label := parts[1]
+		rawData := parts[2]
+
+		// Normalize Python-isms to JSON-isms
+		// Replace single quotes with double quotes
+		normalized := quoteRegex.ReplaceAllString(rawData, `"$1"`)
+		// Replace None -> null
+		normalized = nullRegex.ReplaceAllString(normalized, "null")
+		// Replace True/False -> true/false
+		normalized = boolRegex.ReplaceAllStringFunc(normalized, func(m string) string {
+			return strings.ToLower(m)
+		})
+
+		// Round-trip through JSON to validate and clean up
+		var parsed any
+		if err := json.Unmarshal([]byte(normalized), &parsed); err != nil {
+			// If it's still not valid JSON, return the original match to avoid corruption
+			return fullMatch
+		}
+
+		// Marshal back to a clean, standard JSON string
+		fixedJSON, err := json.Marshal(parsed)
+		if err != nil {
+			return fullMatch
+		}
+
+		return fmt.Sprintf("%s: %s", label, string(fixedJSON))
+	})
 }
 
 func (p *replayPlugin) verifyAndGetNextToolRecordingForAgent(state *invocationReplayState, agentName string, t tool.Tool, args map[string]any) (*recording.ToolRecording, error) {
