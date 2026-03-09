@@ -97,7 +97,8 @@ func buildExamplesSystemInstruction(examples []*Example, model string) string {
 		if example.Input != nil && len(example.Input.Parts) > 0 {
 			for _, part := range example.Input.Parts {
 				if part.Text != "" {
-					sb.WriteString(part.Text)
+					safeText := strings.ReplaceAll(part.Text, "End few-shot", "[PROTECTED]")
+					sb.WriteString(safeText)
 					sb.WriteString("\n")
 				}
 			}
@@ -137,7 +138,9 @@ func buildExamplesSystemInstruction(examples []*Example, model string) string {
 					}
 					fmt.Fprintf(&sb, "%s%v%s", prefix, part.FunctionResponse, functionResponseSuffix)
 				} else if part.Text != "" {
-					sb.WriteString(part.Text)
+					// SANITIZATION: Again, protect the boundary tags
+					safeText := strings.ReplaceAll(part.Text, "End few-shot", "[PROTECTED]")
+					sb.WriteString(safeText)
 					sb.WriteString("\n")
 				}
 			}
