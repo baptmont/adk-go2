@@ -19,6 +19,7 @@ import (
 	"flag"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/gorilla/mux"
@@ -101,6 +102,12 @@ func (a *apiLauncher) Parse(args []string) ([]string, error) {
 	if err != nil || !a.flags.Parsed() {
 		return nil, fmt.Errorf("failed to parse api flags: %v", err)
 	}
+	p := a.config.pathPrefix
+	if !strings.HasPrefix(p, "/") {
+		p = "/" + p
+	}
+	a.config.pathPrefix = strings.TrimSuffix(p, "/")
+
 	restArgs := a.flags.Args()
 	return restArgs, nil
 }
