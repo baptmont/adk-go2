@@ -110,7 +110,7 @@ func (p *replayPlugin) beforeModel(ctx agent.CallbackContext, req *model.LLMRequ
 		return nil, err
 	}
 
-	return recording.LlmResponse.ToLLMResponse(), nil
+	return recording.LlmResponse, nil
 }
 
 func (p *replayPlugin) beforeTool(ctx tool.Context, t tool.Tool, args map[string]any) (map[string]any, error) {
@@ -231,22 +231,32 @@ func (p *replayPlugin) loadInvocationState(ctx agent.InvocationContext) (*invoca
 
 	// Check if file exists
 	if _, err := os.Stat(recordingsPath); os.IsNotExist(err) {
-		fmt.Printf("Failed to read recordings file from %s: %v\n", recordingsPath, err)
 		return nil, fmt.Errorf("replay config error: recordings file not found: %s", recordingsPath)
 	}
 
 	// Read file
 	data, err := os.ReadFile(recordingsPath)
 	if err != nil {
-		fmt.Printf("Failed to read recordings file from %s: %v\n", recordingsPath, err)
 		return nil, fmt.Errorf("failed to read recordings file: %w", err)
 	}
 
 	// Parse YAML
-	var recordings recording.Recordings
-	if err := yaml.Unmarshal(data, &recordings); err != nil {
-		fmt.Printf("Failed to parse recordings from %s: %v\n", recordingsPath, err)
+	var root yaml.Node
+	if err := yaml.Unmarshal(data, &root); err != nil {
 		return nil, fmt.Errorf("failed to parse recordings from %s: %w", recordingsPath, err)
+	}
+
+	if root.Kind == yaml.DocumentNode && len(root.Content) > 0 {
+		actualData := root.Content[0]
+
+		// Pass the actual data node to your function
+		removeUnderscores(actualData)
+		fixTypeMismatches(&root)
+	}
+
+	var recordings recording.Recordings
+	if err := root.Decode(&recordings); err != nil {
+		return nil, fmt.Errorf("failed to decode recordings: %w", err)
 	}
 
 	// Add index to each recording, based on user message index. Used for parallel execution sync.
@@ -280,9 +290,10 @@ func getNextRecordingForAgent(state *invocationReplayState, agentName string) (*
 
 	// Filter ALL recordings for this agent and user message index (strict order)
 	agentRecordings := make([]*recording.Recording, 0)
-	for _, recording := range state.recordings.Recordings {
-		if recording.AgentName == agentName && recording.UserMessageIndex == state.userMessageIndex {
-			agentRecordings = append(agentRecordings, &recording)
+	for i := range state.recordings.Recordings {
+		rec := &state.recordings.Recordings[i] // Get the address of the actual element
+		if rec.AgentName == agentName && rec.UserMessageIndex == state.userMessageIndex {
+			agentRecordings = append(agentRecordings, rec)
 		}
 	}
 
@@ -327,7 +338,7 @@ func (p *replayPlugin) verifyAndGetNextLLMRecordingForAgent(state *invocationRep
 	}
 
 	// Strict verification of LLM request
-	err = verifyLLMRequestMatch(expectedRecording.LLMRecording.LlmRequest.ToLLMRequest(), llmRequest, agentName, currentAgentIndex)
+	err = verifyLLMRequestMatch(expectedRecording.LLMRecording.LlmRequest, llmRequest, agentName, currentAgentIndex)
 	if err != nil {
 		return nil, err
 	}
@@ -428,7 +439,7 @@ func (p *replayPlugin) verifyAndGetNextToolRecordingForAgent(state *invocationRe
 	}
 
 	// Strict verification of tool call
-	err = verifyToolCallMatch(expectedRecording.ToolRecording.ToolCall.ToGenAI(), t.Name(), args, agentName, currentAgentIndex)
+	err = verifyToolCallMatch(expectedRecording.ToolRecording.ToolCall, t.Name(), args, agentName, currentAgentIndex)
 	if err != nil {
 		return nil, err
 	}
