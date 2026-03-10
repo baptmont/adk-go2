@@ -101,18 +101,7 @@ type TransferToAgentTool struct{}
 // Description implements tool.Tool.
 func (t *TransferToAgentTool) Description() string {
 	return `Transfer the question to another agent.
-
-  This tool hands off control to another agent when it's more suitable to
-  answer the user's question according to the agent's description.
-
-  Note:
-    For most use cases, you should use TransferToAgentTool instead of this
-    function directly. TransferToAgentTool provides additional enum constraints
-    that prevent LLMs from hallucinating invalid agent names.
-
-  Args:
-    agent_name: the agent name to transfer to.
-  `
+This tool hands off control to another agent when it's more suitable to answer the user's question according to the agent's description.`
 }
 
 // Name implements tool.Tool.
