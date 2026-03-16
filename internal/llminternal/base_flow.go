@@ -187,6 +187,9 @@ func (f *Flow) runOneStep(ctx agent.InvocationContext) iter.Seq2[*session.Event,
 			}
 			// TODO: generate and yield an auth event if needed.
 
+			if resp.Partial{
+				continue
+			}
 			// Handle function calls.
 
 			ev, err := f.handleFunctionCalls(ctx, tools, resp.LLMResponse, nil)

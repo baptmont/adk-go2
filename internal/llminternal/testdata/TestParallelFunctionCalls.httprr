@@ -1,0 +1,30 @@
+httprr trace v1
+1097 2839
+POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3-pro-preview:streamGenerateContent?alt=sse HTTP/1.1
+Host: generativelanguage.googleapis.com
+User-Agent: Go-http-client/1.1
+Content-Length: 847
+Content-Type: application/json
+
+{"contents":[{"parts":[{"text":"Can you add 2 and 3? Also 4 and 5? And 6 and 7?"}],"role":"user"}],"generationConfig":{},"systemInstruction":{"parts":[{"text":"You are a calculator assistant. You will recieve requests to add two integers. Respond with the sum of the two integers and you must use the sum tool to calculate the sum.\n\nYou are an agent. Your internal name is \"calculator\". The description about you is \"A calculator that can add two integers\"."}],"role":"user"},"tools":[{"functionDeclarations":[{"description":"sums two integers","name":"sum","parametersJsonSchema":{"additionalProperties":false,"properties":{"a":{"type":"integer"},"b":{"type":"integer"}},"required":["a","b"],"type":"object"},"responseJsonSchema":{"additionalProperties":false,"properties":{"sum":{"type":"integer"}},"required":["sum"],"type":"object"}}]}]}HTTP/2.0 200 OK
+Connection: close
+Content-Disposition: attachment
+Content-Type: text/event-stream
+Date: Wed, 11 Mar 2026 12:56:53 GMT
+Server: scaffolding on HTTPServer2
+Server-Timing: gfet4t7; dur=3353
+Vary: Origin
+Vary: X-Origin
+Vary: Referer
+X-Content-Type-Options: nosniff
+X-Frame-Options: SAMEORIGIN
+X-Xss-Protection: 0
+
+data: {"candidates": [{"content": {"parts": [{"functionCall": {"name": "sum","args": {"a": 2,"b": 3},"id": "va3ss0g5"},"thoughtSignature": "EvEECu4EAb4+9vu7qvM/r/3OG5aBVDX2ghC8mIi41ExsB1vhExRoDvqX3amq12YfpJHFyLEwskqlU5m26PL34qfKB8jUrbwLYui2X7CPdaWdTTWNkaUEmzisTmLgAhYJg3MsNaeSrOfrAWvUyol91A5Bm5QuGPcIF2W2bRcUqjAG+G9GxO9c1y5L1+1DIFoCmf1y7klDvnO80BAI2sfzb5gb/t3SVaMHUOgmt69UluxMa1nNBdeA7PvLVtoudYXWwm8wnQRZGJnzOG5lNYYizgSLGLuM3A5C849qtP5XiPn1aWqXKhxDAyWjOELSmFs5sgiSVQYpFQYFd0c5Tk/aLZbnS1oGjikQV9W47IDTxBxjwHSRZozptn+H5pZrTYTsqemXXrb9vF2XR7uf3JQrQjQ2NMYa3lY2yX0HaCFDBIl+wKu0zz98uH3uxRZV+TuL/JFhylNnaA/5sk8ffQ07DvN+L4OY76R4Nf89ed1xv5x83wmL1trxphRWD5GNyrnq47o4q9tO3FDPW1jCzX5mGpwKEvUS0SL2EdWmA9ovlgFq02pnuvfVOBpHyeiDFJ3fZ2ajfuAjb+gINaQTgyZoiumWrc3SMZh8RsB/Z9tpWt4efMspMwOEz9QGym6JNQCFC3u+N21qcQ8CiAqXNgj45JvE3+2nikzTzsm9Wl6q2j2bcix1ZVF3JRz9X/7X2NDgsl2pTIs9gF14b6rDGoBEcEHpeITLvGuISRtIndFZxxhbwdiCgecgRgvFfg+CCx3aTysI+O/k8v8I4JIF6dVNbYFDnLXXhHizPS9pytuzopPDsgS4MEaZCunL9lb+9TtvqjzoUQ=="}],"role": "model"},"index": 0}],"usageMetadata": {"promptTokenCount": 161,"candidatesTokenCount": 16,"totalTokenCount": 325,"promptTokensDetails": [{"modality": "TEXT","tokenCount": 161}],"thoughtsTokenCount": 148},"modelVersion": "gemini-3.1-pro-preview","responseId": "lWaxad-8IanU7M8Ps52T4AY"}
+
+data: {"candidates": [{"content": {"parts": [{"functionCall": {"name": "sum","args": {"b": 5,"a": 4},"id": "0esik3xr"}}],"role": "model"},"index": 0}],"usageMetadata": {"promptTokenCount": 161,"candidatesTokenCount": 32,"totalTokenCount": 341,"promptTokensDetails": [{"modality": "TEXT","tokenCount": 161}],"thoughtsTokenCount": 148},"modelVersion": "gemini-3.1-pro-preview","responseId": "lWaxad-8IanU7M8Ps52T4AY"}
+
+data: {"candidates": [{"content": {"parts": [{"functionCall": {"name": "sum","args": {"b": 7,"a": 6},"id": "rb5wsbph"}}],"role": "model"},"index": 0}],"usageMetadata": {"promptTokenCount": 161,"candidatesTokenCount": 48,"totalTokenCount": 357,"promptTokensDetails": [{"modality": "TEXT","tokenCount": 161}],"thoughtsTokenCount": 148},"modelVersion": "gemini-3.1-pro-preview","responseId": "lWaxad-8IanU7M8Ps52T4AY"}
+
+data: {"candidates": [{"content": {"parts": [{"text": ""}],"role": "model"},"finishReason": "STOP","index": 0}],"usageMetadata": {"promptTokenCount": 161,"candidatesTokenCount": 48,"totalTokenCount": 357,"promptTokensDetails": [{"modality": "TEXT","tokenCount": 161}],"thoughtsTokenCount": 148},"modelVersion": "gemini-3.1-pro-preview","responseId": "lWaxad-8IanU7M8Ps52T4AY"}
+
