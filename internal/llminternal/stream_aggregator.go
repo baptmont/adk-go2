@@ -303,8 +303,16 @@ func (s *streamingResponseAggregator) Close() *model.LLMResponse {
 		errorCode := ""
 		errorMessage := ""
 		if s.finishReason != genai.FinishReasonStop {
-			errorCode = "error"
-			errorMessage = "error"
+			if s.response.ErrorCode != "" {
+				errorCode = s.response.ErrorCode
+			} else {
+				errorCode = "error"
+			}
+			if s.response.ErrorMessage != "" {
+				errorMessage = s.response.ErrorMessage
+			} else {
+				errorMessage = "error"
+			}
 		}
 
 		return &model.LLMResponse{
