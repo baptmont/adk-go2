@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"iter"
 	"maps"
+	"reflect"
 	"strings"
 
 	"google.golang.org/genai"
@@ -97,6 +98,10 @@ func (s *streamingResponseAggregator) aggregateResponse(llmResponse *model.LLMRe
 	}
 
 	for _, part := range llmResponse.Content.Parts {
+		// gemini 3 in streaming returns a last response with an empty part. We will filter it out.
+		if reflect.ValueOf(*part).IsZero() {
+			continue
+		}
 		if part.Text != "" {
 			if s.currentTextBuffer != "" && part.Thought != s.currentTextIsThought {
 				s.flushTextBufferToSequence()

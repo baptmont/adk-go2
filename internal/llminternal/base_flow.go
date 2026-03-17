@@ -22,6 +22,7 @@ import (
 	"maps"
 	"slices"
 	"strings"
+	"sync"
 
 	"github.com/google/uuid"
 	"google.golang.org/genai"
@@ -561,10 +562,9 @@ Suggested fixes:
 // TODO: accept filters to include/exclude function calls.
 // TODO: check feasibility of running tool.Run concurrently.
 func (f *Flow) handleFunctionCalls(ctx agent.InvocationContext, toolsDict map[string]tool.Tool, resp *model.LLMResponse, toolConfirmations map[string]*toolconfirmation.ToolConfirmation) (mergedEvent *session.Event, err error) {
-	var fnResponseEvents []*session.Event
 	fnCalls := utils.FunctionCalls(resp.Content)
 	toolNames := slices.Collect(maps.Keys(toolsDict))
-	var result map[string]any
+	
 	// Merged span for parallel tool calls - create only if there is more than one tool call.
 	if len(fnCalls) > 1 {
 		mergedCtx, mergedToolCallSpan := telemetry.StartTrace(ctx, "execute_tool (merged)")
@@ -574,9 +574,15 @@ func (f *Flow) handleFunctionCalls(ctx agent.InvocationContext, toolsDict map[st
 			mergedToolCallSpan.End()
 		}()
 	}
-	for _, fnCall := range fnCalls {
-		// Wrap function calls in anonymous func to limit the scope of the span.
-		func() {
+
+	fnResponseEvents := make([]*session.Event, len(fnCalls))
+	var wg sync.WaitGroup
+
+	for i, fnCall := range fnCalls {
+		wg.Add(1)
+		go func(i int, fnCall *genai.FunctionCall) {
+			defer wg.Done()
+
 			sctx, span := telemetry.StartExecuteToolSpan(ctx, telemetry.StartExecuteToolSpanParams{
 				ToolName: fnCall.Name,
 				Args:     fnCall.Args,
@@ -589,6 +595,7 @@ func (f *Flow) handleFunctionCalls(ctx agent.InvocationContext, toolsDict map[st
 			}
 			toolCtx := toolinternal.NewToolContext(toolCallCtx, fnCall.ID, &session.EventActions{StateDelta: make(map[string]any)}, confirmation)
 
+			var result map[string]any
 			curTool, found := toolsDict[fnCall.Name]
 			if !found {
 				err := newToolNotFoundError(fnCall.Name, toolNames)
@@ -645,9 +652,10 @@ func (f *Flow) handleFunctionCalls(ctx agent.InvocationContext, toolsDict map[st
 				Error:         toolErr,
 			})
 
-			fnResponseEvents = append(fnResponseEvents, ev)
-		}()
+			fnResponseEvents[i] = ev
+		}(i, fnCall)
 	}
+	wg.Wait()
 	mergedEvent, err = mergeParallelFunctionResponseEvents(fnResponseEvents)
 	if err != nil {
 		return mergedEvent, err
