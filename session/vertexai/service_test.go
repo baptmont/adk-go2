@@ -111,7 +111,7 @@ func emptyService(t *testing.T, name string, offline bool) (session.Service, map
 	replayFile := sanitizeFilename(name)
 
 	var opts []option.ClientOption
-	var teardown = func() {}
+	teardown := func() {}
 	var err error
 
 	if offline {
