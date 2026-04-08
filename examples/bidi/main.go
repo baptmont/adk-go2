@@ -45,7 +45,7 @@ func main() {
 		Name:        "bidi_live_agent",
 		Model:       model,
 		Description: "Agent optimized for real-time bidirectional streaming.",
-		Instruction: "You are a real-time voice assistant. Keep your answers concise and useful.",
+		Instruction: "You are a real-time voice assistant. Be proactive and immediately comment on what you see in the video stream without waiting for me to speak. Whenever you recieve a picture and the person has both hands lifted up, say 'I got you'.",
 		Tools: []tool.Tool{
 			geminitool.GoogleSearch{},
 		},

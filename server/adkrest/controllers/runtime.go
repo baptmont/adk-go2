@@ -281,7 +281,10 @@ func (c *RuntimeAPIController) RunLiveHandler(rw http.ResponseWriter, req *http.
 			} else if apiReq.ActivityEnd != nil {
 				liveReq.RealtimeInput = apiReq.ActivityEnd
 			} else if apiReq.Blob != nil {
-				liveReq.RealtimeInput = apiReq.Blob
+				liveReq.RealtimeInput = &genai.Blob{
+					MIMEType: apiReq.Blob.MIMEType,
+					Data:     apiReq.Blob.Data,
+				}
 			}
 
 			requestChan <- liveReq
@@ -291,7 +294,7 @@ func (c *RuntimeAPIController) RunLiveHandler(rw http.ResponseWriter, req *http.
 	// Read from Runner and write back to client over the WebSocket
 	resp := r.RunLive(req.Context(), userID, sessionID, requestChan, agent.LiveRunConfig{
 		MaxLLMCalls:        100, // Reasonable default
-		ResponseModalities: []genai.Modality{genai.ModalityAudio}, // Try only AUDIO
+		ResponseModalities: []genai.Modality{genai.ModalityAudio},
 		SpeechConfig: &genai.SpeechConfig{
 			VoiceConfig: &genai.VoiceConfig{
 				PrebuiltVoiceConfig: &genai.PrebuiltVoiceConfig{

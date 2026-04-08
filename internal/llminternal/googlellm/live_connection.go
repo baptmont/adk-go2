@@ -17,6 +17,7 @@ package googlellm
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"google.golang.org/genai"
 
@@ -101,6 +102,8 @@ func (c *LiveConnection) SendContent(ctx context.Context, content *genai.Content
 		}
 	}
 
+	fmt.Printf("sending message\n")
+
 	return nil
 }
 
@@ -108,15 +111,37 @@ func (c *LiveConnection) SendContent(ctx context.Context, content *genai.Content
 func (c *LiveConnection) SendRealtime(ctx context.Context, input any) error {
 	switch v := input.(type) {
 	case *genai.Blob:
-		v.MIMEType = "audio/pcm"
+		if v.MIMEType == "" {
+			// Detect PNG by signature: \x89PNG\r\n\x1a\n
+			isPNG := len(v.Data) >= 8 &&
+				v.Data[0] == 0x89 && v.Data[1] == 0x50 && v.Data[2] == 0x4E && v.Data[3] == 0x47 &&
+				v.Data[4] == 0x0D && v.Data[5] == 0x0A && v.Data[6] == 0x1A && v.Data[7] == 0x0A
+
+			if isPNG {
+				v.MIMEType = "image/png"
+			} else {
+				v.MIMEType = "audio/pcm"
+			}
+		}
+
+		if strings.HasPrefix(v.MIMEType, "image/") {
+			fmt.Printf("sending image (%s)\n", v.MIMEType)
+			return c.sdkSession.SendRealtimeInput(genai.LiveRealtimeInput{
+				Video: v,
+			})
+		}
+
+		fmt.Printf("sending audio (%s)\n", v.MIMEType)
 		return c.sdkSession.SendRealtimeInput(genai.LiveRealtimeInput{
 			Audio: v,
 		})
 	case *genai.ActivityStart:
+		fmt.Printf("sending activity start\n")
 		return c.sdkSession.SendRealtimeInput(genai.LiveRealtimeInput{
 			ActivityStart: v,
 		})
 	case *genai.ActivityEnd:
+		fmt.Printf("sending activity end\n")
 		return c.sdkSession.SendRealtimeInput(genai.LiveRealtimeInput{
 			ActivityEnd: v,
 		})
@@ -134,6 +159,10 @@ func (c *LiveConnection) Recv(ctx context.Context) (*model.LLMResponse, error) {
 
 	if msg == nil {
 		return nil, nil
+	}
+
+	if msg.ServerContent != nil && msg.ServerContent.OutputTranscription != nil {
+		fmt.Printf("recieved message: %s\n", msg.ServerContent.OutputTranscription.Text)
 	}
 
 	resp := &model.LLMResponse{}

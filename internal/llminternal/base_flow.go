@@ -146,16 +146,25 @@ func (f *Flow) RunLive(ctx agent.InvocationContext, requestChan <-chan agent.Liv
 			return
 		}
 
+		nreq := &model.LLMRequest{
+			Model: f.Model.Name(),
+		}
+		for ev, err := range f.preprocess(ctx, nreq) {
+			if err != nil {
+				yield(nil, err)
+				return
+			}
+			if ev != nil {
+				if !yield(ev, nil) {
+					return
+				}
+			}
+		}
+
 		liveSession, err := client.Live.Connect(ctx, f.Model.Name(), &genai.LiveConnectConfig{
 			ResponseModalities:       liveCfg.ResponseModalities,
 			SpeechConfig:             liveCfg.SpeechConfig,
-			SystemInstruction: &genai.Content{
-				Parts: []*genai.Part{
-					{
-						Text: "You are a real-time voice assistant. Keep your answers concise and useful.",
-					},
-				},
-			},
+			SystemInstruction:        nreq.Config.SystemInstruction,
 		})
 		if err != nil {
 			yield(nil, fmt.Errorf("failed to connect live session: %w", err))
@@ -182,6 +191,16 @@ func (f *Flow) RunLive(ctx agent.InvocationContext, requestChan <-chan agent.Liv
 			}
 			eventsChan <- ev
 		}()
+
+		fmt.Printf("sending preprocessed content %d\n", len(nreq.Contents))
+		// Send preprocessed content directly to model if any exists after early preprocessing
+		if len(nreq.Contents) > 0 {
+			if err := liveConn.SendContent(ctx, nreq.Contents[0]); err != nil {
+				fmt.Printf("failed to send content: %v\n", err)
+				yield(nil, err)
+				return
+			}
+		}
 
 		// Reading from model loop
 		go func() {
