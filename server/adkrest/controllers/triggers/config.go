@@ -1,4 +1,4 @@
-// Copyright 2025 Google LLC
+// Copyright 2026 Google LLC
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -12,15 +12,18 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// adkgo is a CLI tool to help deploy and test an ADK application.
-package main
+package triggers
 
-import (
-	_ "google.golang.org/adk/cmd/adkgo/internal/deploy/agentengine"
-	_ "google.golang.org/adk/cmd/adkgo/internal/deploy/cloudrun"
-	"google.golang.org/adk/cmd/adkgo/internal/root"
-)
+import "time"
 
-func main() {
-	root.Execute()
+// TriggerConfig contains configuration options for triggers.
+type TriggerConfig struct {
+	// MaxRetries is the maximum number of times to retry a failed agent execution.
+	MaxRetries int
+	// BaseDelay is the base delay between retries.
+	BaseDelay time.Duration
+	// MaxDelay is the maximum delay between retries.
+	MaxDelay time.Duration
+	// MaxConcurrentRuns is the maximum number of concurrent runs.
+	MaxConcurrentRuns int
 }
