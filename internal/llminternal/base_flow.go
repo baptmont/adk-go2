@@ -165,6 +165,7 @@ func (f *Flow) RunLive(ctx agent.InvocationContext, requestChan <-chan agent.Liv
 			ResponseModalities:       liveCfg.ResponseModalities,
 			SpeechConfig:             liveCfg.SpeechConfig,
 			SystemInstruction:        nreq.Config.SystemInstruction,
+			Tools:                    nreq.Config.Tools,
 		})
 		if err != nil {
 			yield(nil, fmt.Errorf("failed to connect live session: %w", err))
@@ -242,6 +243,29 @@ func (f *Flow) RunLive(ctx agent.InvocationContext, requestChan <-chan agent.Liv
 			case ev := <-eventsChan:
 				if !yield(ev, nil) {
 					return
+				}
+				// Handle function calls if present in the event
+				fnCalls := utils.FunctionCalls(ev.LLMResponse.Content)
+				if len(fnCalls) > 0 {
+					tools := make(map[string]tool.Tool)
+					for _, t := range f.Tools {
+						tools[t.Name()] = t
+					}
+					respEv, err := f.handleFunctionCalls(ctx, tools, &ev.LLMResponse, nil)
+					if err != nil {
+						yield(nil, err)
+						return
+					}
+					if respEv != nil {
+						if !yield(respEv, nil) {
+							return
+						}
+						// Send function response back to model
+						if err := liveConn.SendContent(ctx, respEv.LLMResponse.Content); err != nil {
+							yield(nil, err)
+							return
+						}
+					}
 				}
 			case err := <-errChan:
 				yield(nil, err)

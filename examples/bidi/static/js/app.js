@@ -11,6 +11,7 @@ const userId = "demo-user";
 let sessionId = "demo-session-" + Math.random().toString(36).substring(7);
 let websocket = null;
 let is_audio = false;
+let audioBuffer = [];
 
 // Get checkbox elements for RunConfig options
 const enableProactivityCheckbox = document.getElementById("enableProactivity");
@@ -24,10 +25,10 @@ function handleRunConfigChange() {
       proactivity: enableProactivityCheckbox.checked,
       affective_dialog: enableAffectiveDialogCheckbox.checked
     }, '🔄', 'system');
-    
+
     // Generate new session ID to start fresh
     sessionId = "demo-session-" + Math.random().toString(36).substring(7);
-    
+
     websocket.close();
     // connectWebsocket() will be called by onclose handler after delay
   }
@@ -679,13 +680,26 @@ function connectWebsocket() {
       }
 
       for (const part of parts) {
+        // Handle function response
+        if (part.functionResponse) {
+          console.log("Received function response:", part.functionResponse);
+          if (part.functionResponse.name === "camera_toggle") {
+            toggleVideoStreaming();
+          }
+        }
+
         // Handle inline data (audio)
         if (part.inlineData) {
           const mimeType = part.inlineData.mimeType;
           const data = part.inlineData.data;
 
-          if (mimeType && mimeType.startsWith("audio/pcm") && audioPlayerNode) {
-            audioPlayerNode.port.postMessage(base64ToArray(data));
+          if (mimeType && mimeType.startsWith("audio/pcm")) {
+            const arrayBuffer = base64ToArray(data);
+            if (audioPlayerNode) {
+              audioPlayerNode.port.postMessage(arrayBuffer);
+            } else {
+              audioBuffer.push(arrayBuffer);
+            }
           }
         }
 
@@ -702,6 +716,12 @@ function connectWebsocket() {
             continue;
           }
 
+          // Handle system messages separately to avoid hijacking chat bubbles
+          if (adkEvent.author === "system") {
+            addSystemMessage(part.text);
+            continue;
+          }
+
           const isUser = (adkEvent.content.role === "user" || adkEvent.author === "user");
 
           // Add a new message bubble for a new turn, or if role changed
@@ -714,7 +734,7 @@ function connectWebsocket() {
                 typingIndicator.remove();
               }
             }
-            
+
             currentMessageId = Math.random().toString(36).substring(7);
             currentBubbleElement = createMessageBubble(part.text, isUser, true);
             currentBubbleElement.id = currentMessageId;
@@ -798,6 +818,7 @@ function addSubmitHandler() {
 
 // Send a message to the server as JSON
 function sendMessage(message) {
+  ensureAudioPlayerStarted();
   if (websocket && websocket.readyState == WebSocket.OPEN) {
     const jsonMessage = JSON.stringify({
       content: {
@@ -1114,18 +1135,18 @@ fileInput.addEventListener("change", (event) => {
   reader.onloadend = () => {
     const base64data = reader.result.split(',')[1];
     const mimeType = file.type;
-    
+
     // Display the image in the chat
     const imageBubble = createImageBubble(reader.result, true);
     appendMessage(imageBubble);
     scrollToBottom();
-    
+
     // Send to server
     sendImage(base64data, mimeType);
-    
+
     // Reset file input so the same file can be selected again
     fileInput.value = '';
-    
+
     // Log to console
     addConsoleEntry('outgoing', `File sent: ${file.name} (${file.size} bytes)`, {
       name: file.name,
@@ -1157,15 +1178,28 @@ let micStream;
 import { startAudioPlayerWorklet } from "./audio-player.js";
 import { startAudioRecorderWorklet } from "./audio-recorder.js";
 
+// Ensure audio player is started
+function ensureAudioPlayerStarted() {
+  if (!audioPlayerContext) {
+    startAudioPlayerWorklet().then(([node, ctx]) => {
+      audioPlayerNode = node;
+      audioPlayerContext = ctx;
+      // Drain audio buffer
+      while (audioBuffer.length > 0) {
+        audioPlayerNode.port.postMessage(audioBuffer.shift());
+      }
+    });
+  } else if (audioPlayerContext.state === 'suspended') {
+    audioPlayerContext.resume();
+  }
+}
+
 // Start audio
 function startAudio() {
   // Start audio output
-  startAudioPlayerWorklet().then(([node, ctx]) => {
-    audioPlayerNode = node;
-    audioPlayerContext = ctx;
-  });
+  ensureAudioPlayerStarted();
   // Start audio input
-  startAudioRecorderWorklet(audioRecorderHandler).then(
+  return startAudioRecorderWorklet(audioRecorderHandler).then(
     ([node, ctx, stream]) => {
       audioRecorderNode = node;
       audioRecorderContext = ctx;
@@ -1175,7 +1209,7 @@ function startAudio() {
 }
 
 // Toggle audio streaming
-function toggleAudioStreaming() {
+async function toggleAudioStreaming() {
   if (is_audio) {
     // Stop audio
     is_audio = false;
@@ -1190,25 +1224,32 @@ function toggleAudioStreaming() {
       audioRecorderContext.close();
       audioRecorderContext = null;
     }
-    if (audioPlayerContext) {
-      audioPlayerContext.close();
-      audioPlayerContext = null;
-    }
+    // Keep audioPlayerContext open so we can still hear the agent
     startAudioButton.textContent = "🎤 Start Voice";
     startAudioButton.classList.remove("active");
     addSystemMessage("Audio streaming stopped");
     addConsoleEntry('outgoing', 'Audio Mode Disabled', { status: 'Audio stopped' }, '🎤', 'system');
   } else {
     // Start audio
-    startAudio();
-    is_audio = true;
-    startAudioButton.textContent = "⏹️ Stop Voice";
-    startAudioButton.classList.add("active");
-    addSystemMessage("Audio mode enabled - you can now speak to the agent");
-    addConsoleEntry('outgoing', 'Audio Mode Enabled', {
-      status: 'Audio worklets started',
-      message: 'Microphone active - audio input will be sent to agent'
-    }, '🎤', 'system');
+    try {
+      await startAudio();
+      is_audio = true;
+      startAudioButton.textContent = "⏹️ Stop Voice";
+      startAudioButton.classList.add("active");
+      addSystemMessage("Audio mode enabled - you can now speak to the agent");
+      addConsoleEntry('outgoing', 'Audio Mode Enabled', {
+        status: 'Audio worklets started',
+        message: 'Microphone active - audio input will be sent to agent'
+      }, '🎤', 'system');
+    } catch (error) {
+      console.error("Failed to start audio:", error);
+      addSystemMessage(`Failed to start audio: ${error.message}`);
+      // Reset state
+      is_audio = false;
+      startAudioButton.textContent = "🎤 Start Voice";
+      startAudioButton.classList.remove("active");
+      addConsoleEntry('error', 'Failed to enable audio mode', { error: error.message }, '⚠️', 'system');
+    }
   }
 }
 

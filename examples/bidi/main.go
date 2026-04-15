@@ -31,6 +31,7 @@ import (
 	"google.golang.org/adk/server/adkrest/controllers"
 	"google.golang.org/adk/session"
 	"google.golang.org/adk/tool"
+	"google.golang.org/adk/tool/functiontool"
 	"google.golang.org/adk/tool/geminitool"
 )
 
@@ -44,13 +45,30 @@ func main() {
 		log.Fatalf("Failed to create model: %v", err)
 	}
 
+	type EmptyArgs struct{}
+	type MessageResult struct {
+		Message string `json:"message"`
+	}
+
+	cameraTool, err := functiontool.New(functiontool.Config{
+		Name:        "camera_toggle",
+		Description: "Turns the camera on or off.",
+	}, func(ctx tool.Context, args EmptyArgs) (MessageResult, error) {
+		fmt.Println("Camera tool was called!")
+		return MessageResult{Message: "Camera tool called successfully!"}, nil
+	})
+	if err != nil {
+		log.Fatalf("Failed to create camera tool: %v", err)
+	}
+
 	a, err := llmagent.New(llmagent.Config{
 		Name:        "bidi-demo",
 		Model:       model,
 		Description: "Agent optimized for real-time bidirectional streaming.",
-		Instruction: "You are a real-time voice assistant. Be proactive and immediately comment on what you see in the video stream without waiting for me to speak. Whenever you recieve a picture and the person has both hands lifted up, say 'I got you'.",
+		Instruction: "You are a real-time voice assistant. Additionally whenever you see someone raising any number of fingers you should reply with how many fingers they are showing. If they keep changing the number of fingers you should note the changes, like first you showed x fingers and then you showed y fingers.",
 		Tools: []tool.Tool{
 			geminitool.GoogleSearch{},
+			cameraTool,
 		},
 	})
 	if err != nil {
