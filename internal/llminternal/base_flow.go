@@ -18,6 +18,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"iter"
 	"maps"
 	"slices"
@@ -123,39 +124,115 @@ func (f *Flow) Run(ctx agent.InvocationContext) iter.Seq2[*session.Event, error]
 	}
 }
 
-func (f *Flow) RunLive(ctx agent.InvocationContext, requestChan <-chan agent.LiveRequest) iter.Seq2[*session.Event, error] {
-	return func(yield func(*session.Event, error) bool) {
-		clientProvider, ok := f.Model.(interface {
-			Client() *genai.Client
-		})
-		if !ok {
-			yield(nil, fmt.Errorf("model does not support live connection"))
-			return
-		}
-		client := clientProvider.Client()
+type liveSessionImpl struct {
+	inputCh   chan agent.LiveRequest
+	outputCh  chan eventOrError
+	done      chan struct{}
+	closeOnce sync.Once
+}
 
-		runCfg := runconfig.FromContext(ctx)
-		if runCfg == nil || runCfg.Live == nil {
-			yield(nil, fmt.Errorf("live run config not found"))
-			return
-		}
+type eventOrError struct {
+	event *session.Event
+	err   error
+}
 
-		liveCfg, ok := runCfg.Live.(*agent.LiveRunConfig)
+func newLiveSessionImpl() *liveSessionImpl {
+	return &liveSessionImpl{
+		inputCh:  make(chan agent.LiveRequest),
+		outputCh: make(chan eventOrError),
+		done:     make(chan struct{}),
+	}
+}
+
+func (s *liveSessionImpl) Send(req agent.LiveRequest) error {
+	select {
+	case s.inputCh <- req:
+		return nil
+	case <-s.done:
+		return io.EOF
+	}
+}
+
+func (s *liveSessionImpl) Recv() (*session.Event, error) {
+	select {
+	case res := <-s.outputCh:
+		return res.event, res.err
+	case <-s.done:
+		return nil, io.EOF
+	}
+}
+
+func (s *liveSessionImpl) Close() error {
+	s.closeOnce.Do(func() {
+		close(s.done)
+	})
+	return nil
+}
+
+func (s *liveSessionImpl) pushEvent(ev *session.Event) bool {
+	select {
+	case s.outputCh <- eventOrError{event: ev}:
+		return true
+	case <-s.done:
+		return false
+	}
+}
+
+func (s *liveSessionImpl) pushError(err error) bool {
+	select {
+	case s.outputCh <- eventOrError{err: err}:
+		return true
+	case <-s.done:
+		return false
+	}
+}
+
+func (s *liveSessionImpl) recvRequest() (agent.LiveRequest, error) {
+	select {
+	case req, ok := <-s.inputCh:
 		if !ok {
-			yield(nil, fmt.Errorf("invalid live run config type"))
-			return
+			return agent.LiveRequest{}, io.EOF
 		}
+		return req, nil
+	case <-s.done:
+		return agent.LiveRequest{}, io.EOF
+	}
+}
+
+func (f *Flow) RunLive(ctx agent.InvocationContext) (agent.LiveSession, error) {
+	clientProvider, ok := f.Model.(interface {
+		Client() *genai.Client
+	})
+	if !ok {
+		return nil, fmt.Errorf("model does not support live connection")
+	}
+	client := clientProvider.Client()
+
+	runCfg := runconfig.FromContext(ctx)
+	if runCfg == nil || runCfg.Live == nil {
+		return nil, fmt.Errorf("live run config not found")
+	}
+
+	liveCfg, ok := runCfg.Live.(*agent.LiveRunConfig)
+	if !ok {
+		return nil, fmt.Errorf("invalid live run config type")
+	}
+
+	sess := newLiveSessionImpl()
+
+	go func() {
+		defer sess.Close()
 
 		nreq := &model.LLMRequest{
 			Model: f.Model.Name(),
 		}
 		for ev, err := range f.preprocess(ctx, nreq) {
 			if err != nil {
-				yield(nil, err)
+				sess.pushError(err)
 				return
 			}
 			if ev != nil {
-				if !yield(ev, nil) {
+				if !sess.pushEvent(ev) {
 					return
 				}
 			}
@@ -168,7 +245,7 @@ func (f *Flow) RunLive(ctx agent.InvocationContext, requestChan <-chan agent.Liv
 			Tools:                    nreq.Config.Tools,
 		})
 		if err != nil {
-			yield(nil, fmt.Errorf("failed to connect live session: %w", err))
+			sess.pushError(fmt.Errorf("failed to connect live session: %w", err))
 			return
 		}
 
@@ -198,7 +275,7 @@ func (f *Flow) RunLive(ctx agent.InvocationContext, requestChan <-chan agent.Liv
 		if len(nreq.Contents) > 0 {
 			if err := liveConn.SendContent(ctx, nreq.Contents[0]); err != nil {
 				fmt.Printf("failed to send content: %v\n", err)
-				yield(nil, err)
+				sess.pushError(err)
 				return
 			}
 		}
@@ -222,7 +299,14 @@ func (f *Flow) RunLive(ctx agent.InvocationContext, requestChan <-chan agent.Liv
 
 		// Sending to model loop
 		go func() {
-			for req := range requestChan {
+			for {
+				req, err := sess.recvRequest()
+				if err != nil {
+					if err != io.EOF {
+						errChan <- err
+					}
+					return
+				}
 				if req.Content != nil {
 					if err := liveConn.SendContent(ctx, req.Content); err != nil {
 						errChan <- err
@@ -241,7 +325,7 @@ func (f *Flow) RunLive(ctx agent.InvocationContext, requestChan <-chan agent.Liv
 		for {
 			select {
 			case ev := <-eventsChan:
-				if !yield(ev, nil) {
+				if !sess.pushEvent(ev) {
 					return
 				}
 				// Handle function calls if present in the event
@@ -253,29 +337,31 @@ func (f *Flow) RunLive(ctx agent.InvocationContext, requestChan <-chan agent.Liv
 					}
 					respEv, err := f.handleFunctionCalls(ctx, tools, &ev.LLMResponse, nil)
 					if err != nil {
-						yield(nil, err)
+						sess.pushError(err)
 						return
 					}
 					if respEv != nil {
-						if !yield(respEv, nil) {
+						if !sess.pushEvent(respEv) {
 							return
 						}
 						// Send function response back to model
 						if err := liveConn.SendContent(ctx, respEv.LLMResponse.Content); err != nil {
-							yield(nil, err)
+							sess.pushError(err)
 							return
 						}
 					}
 				}
 			case err := <-errChan:
-				yield(nil, err)
+				sess.pushError(err)
 				return
 			case <-ctx.Done():
-				yield(nil, ctx.Err())
+				sess.pushError(ctx.Err())
 				return
 			}
 		}
-	}
+	}()
+
+	return sess, nil
 }
 
 func (f *Flow) runOneStep(ctx agent.InvocationContext) iter.Seq2[*session.Event, error] {

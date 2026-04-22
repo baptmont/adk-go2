@@ -15,17 +15,22 @@
 package agent
 
 import (
-	"iter"
-
 	"google.golang.org/genai"
 
 	"google.golang.org/adk/session"
 )
 
+// LiveSession manages the bidirectional stream for a live session.
+type LiveSession interface {
+	Send(req LiveRequest) error
+	Recv() (*session.Event, error)
+	Close() error
+}
+
 // LiveAgent extends the base Agent interface to support bidirectional streaming.
 type LiveAgent interface {
 	Agent
-	RunLive(ctx InvocationContext, requestChan <-chan LiveRequest) iter.Seq2[*session.Event, error]
+	RunLive(ctx InvocationContext) (LiveSession, error)
 }
 
 // LiveRequest represents an incoming client event for a live session.

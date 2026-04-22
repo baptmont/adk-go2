@@ -18,6 +18,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"time"
 
@@ -257,11 +258,28 @@ func (c *RuntimeAPIController) RunLiveHandler(rw http.ResponseWriter, req *http.
 		return nil
 	}
 
-	requestChan := make(chan agent.LiveRequest)
+	// Read from Runner and write back to client over the WebSocket
+	liveSession, err := r.RunLive(req.Context(), userID, sessionID, agent.LiveRunConfig{
+		MaxLLMCalls:        100, // Reasonable default
+		ResponseModalities: []genai.Modality{genai.ModalityAudio},
+		SpeechConfig: &genai.SpeechConfig{
+			VoiceConfig: &genai.VoiceConfig{
+				PrebuiltVoiceConfig: &genai.PrebuiltVoiceConfig{
+					VoiceName: "Aoede",
+				},
+			},
+		},
+		InputAudioTranscription:  &genai.AudioTranscriptionConfig{},
+		OutputAudioTranscription: &genai.AudioTranscriptionConfig{},
+	})
+	if err != nil {
+		ws.WriteMessage(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.CloseInternalServerErr, err.Error()))
+		return nil
+	}
+	defer liveSession.Close()
 
 	// Spawning goroutine for reading from the client over WebSocket and pushing it to Runner
 	go func() {
-		defer close(requestChan)
 		for {
 			messageType, p, err := ws.ReadMessage()
 			if err != nil {
@@ -270,12 +288,12 @@ func (c *RuntimeAPIController) RunLiveHandler(rw http.ResponseWriter, req *http.
 			}
 
 			if messageType == websocket.BinaryMessage {
-				requestChan <- agent.LiveRequest{
+				liveSession.Send(agent.LiveRequest{
 					RealtimeInput: &genai.Blob{
 						MIMEType: "audio/pcm;rate=16000",
 						Data:     p,
 					},
-				}
+				})
 			} else if messageType == websocket.TextMessage {
 				var apiReq models.LiveRequest
 				if err := json.Unmarshal(p, &apiReq); err != nil {
@@ -301,30 +319,18 @@ func (c *RuntimeAPIController) RunLiveHandler(rw http.ResponseWriter, req *http.
 					}
 				}
 
-				requestChan <- liveReq
+				liveSession.Send(liveReq)
 			}
 		}
 	}()
 
-	// Read from Runner and write back to client over the WebSocket
-	resp := r.RunLive(req.Context(), userID, sessionID, requestChan, agent.LiveRunConfig{
-		MaxLLMCalls:        100, // Reasonable default
-		ResponseModalities: []genai.Modality{genai.ModalityAudio},
-		SpeechConfig: &genai.SpeechConfig{
-			VoiceConfig: &genai.VoiceConfig{
-				PrebuiltVoiceConfig: &genai.PrebuiltVoiceConfig{
-					VoiceName: "Aoede",
-				},
-			},
-		},
-		InputAudioTranscription:  &genai.AudioTranscriptionConfig{},
-		OutputAudioTranscription: &genai.AudioTranscriptionConfig{},
-	})
-
-	for event, err := range resp {
+	for {
+		event, err := liveSession.Recv()
 		if err != nil {
-			fmt.Printf("RunLive failed: %v\n", err)
-			ws.WriteMessage(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.CloseInternalServerErr, err.Error()))
+			if err != io.EOF {
+				fmt.Printf("RunLive failed: %v\n", err)
+				ws.WriteMessage(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.CloseInternalServerErr, err.Error()))
+			}
 			break
 		}
 
