@@ -287,12 +287,14 @@ func (c *RuntimeAPIController) RunLiveHandler(rw http.ResponseWriter, req *http.
 			}
 
 			if messageType == websocket.BinaryMessage {
-				liveSession.Send(agent.LiveRequest{
+				if err := liveSession.Send(agent.LiveRequest{
 					RealtimeInput: &genai.Blob{
 						MIMEType: "audio/pcm;rate=16000",
 						Data:     p,
 					},
-				})
+				}); err != nil {
+					break
+				}
 			} else if messageType == websocket.TextMessage {
 				var apiReq models.LiveRequest
 				if err := json.Unmarshal(p, &apiReq); err != nil {
@@ -318,7 +320,9 @@ func (c *RuntimeAPIController) RunLiveHandler(rw http.ResponseWriter, req *http.
 					}
 				}
 
-				liveSession.Send(liveReq)
+				if err := liveSession.Send(liveReq); err != nil {
+					break
+				}
 			}
 		}
 	}()

@@ -313,6 +313,16 @@ func (s *runnerLiveSession) Close() error {
 	return s.sess.Close()
 }
 
+type closedLiveSession struct{}
+
+func (s *closedLiveSession) Send(req agent.LiveRequest) error {
+	return fmt.Errorf("session is closed")
+}
+
+func (s *closedLiveSession) Close() error {
+	return nil
+}
+
 func (r *Runner) RunLive(ctx context.Context, userID, sessionID string, cfg agent.LiveRunConfig, opts ...RunOption) (agent.LiveSession, iter.Seq2[*session.Event, error], error) {
 	options := runOptions{}
 	for _, opt := range opts {
@@ -388,12 +398,41 @@ func (r *Runner) RunLive(ctx context.Context, userID, sessionID string, cfg agen
 		UserContent: nil,
 	})
 
+	if r.pluginManager != nil {
+		earlyExitResult, err := r.pluginManager.RunBeforeRunCallback(iCtx)
+		if err != nil {
+			return nil, nil, err
+		}
+		if earlyExitResult != nil {
+			earlyExitEvent := session.NewEvent(iCtx.InvocationID())
+			earlyExitEvent.Author = agentToRun.Name()
+			earlyExitEvent.LLMResponse = model.LLMResponse{
+				Content: earlyExitResult,
+			}
+			if err := r.sessionService.AppendEvent(iCtx, storedSession, earlyExitEvent); err != nil {
+				return nil, nil, fmt.Errorf("failed to add event to session: %w", err)
+			}
+
+			earlyExitIter := func(yield func(*session.Event, error) bool) {
+				yield(earlyExitEvent, nil)
+			}
+			return &closedLiveSession{}, earlyExitIter, nil
+		}
+	}
+
 	agentSess, innerIter, err := liveAgent.RunLive(iCtx)
 	if err != nil {
 		return nil, nil, err
 	}
 
 	wrappedIter := func(yield func(*session.Event, error) bool) {
+		if r.pluginManager != nil {
+			defer r.pluginManager.RunAfterRunCallback(iCtx)
+		}
+
+		var bufferedEvents []*session.Event
+		isTranscribing := false
+
 		for event, err := range innerIter {
 			if err != nil {
 				if !yield(nil, err) {
@@ -412,6 +451,57 @@ func (r *Runner) RunLive(ctx context.Context, userID, sessionID string, cfg agen
 				}
 				if modifiedEvent != nil {
 					event = modifiedEvent
+				}
+			}
+
+			// Chronological event buffering logic for Live streaming.
+			// Holds back tool calls/responses if they arrive before the transcription finishes.
+			if event.LLMResponse.Partial && (event.LLMResponse.InputTranscription != nil || event.LLMResponse.OutputTranscription != nil) {
+				isTranscribing = true
+			}
+
+			isToolCallOrResp := false
+			if event.LLMResponse.Content != nil {
+				for _, part := range event.LLMResponse.Content.Parts {
+					if part.FunctionCall != nil || part.FunctionResponse != nil {
+						isToolCallOrResp = true
+						break
+					}
+				}
+			}
+
+			if isTranscribing && isToolCallOrResp {
+				bufferedEvents = append(bufferedEvents, event)
+				continue
+			}
+
+			if !event.LLMResponse.Partial {
+				if event.LLMResponse.InputTranscription != nil || event.LLMResponse.OutputTranscription != nil {
+					isTranscribing = false
+
+					if err := r.sessionService.AppendEvent(iCtx, storedSession, event); err != nil {
+						if !yield(nil, fmt.Errorf("failed to add event to session: %w", err)) {
+							return
+						}
+						continue
+					}
+					if !yield(event, nil) {
+						return
+					}
+
+					for _, bufferedEvent := range bufferedEvents {
+						if err := r.sessionService.AppendEvent(iCtx, storedSession, bufferedEvent); err != nil {
+							if !yield(nil, fmt.Errorf("failed to add event to session: %w", err)) {
+								return
+							}
+							continue
+						}
+						if !yield(bufferedEvent, nil) {
+							return
+						}
+					}
+					bufferedEvents = nil
+					continue
 				}
 			}
 
