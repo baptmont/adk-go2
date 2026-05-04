@@ -155,12 +155,18 @@ func (s *liveSessionImpl) Send(req agent.LiveRequest) error {
 	}
 }
 
-func (s *liveSessionImpl) Recv() (*session.Event, error) {
-	select {
-	case res := <-s.outputCh:
-		return res.event, res.err
-	case <-s.done:
-		return nil, io.EOF
+func (s *liveSessionImpl) recvIter() iter.Seq2[*session.Event, error] {
+	return func(yield func(*session.Event, error) bool) {
+		for {
+			select {
+			case res := <-s.outputCh:
+				if !yield(res.event, res.err) {
+					return
+				}
+			case <-s.done:
+				return
+			}
+		}
 	}
 }
 
@@ -201,23 +207,23 @@ func (s *liveSessionImpl) recvRequest() (agent.LiveRequest, error) {
 	}
 }
 
-func (f *Flow) RunLive(ctx agent.InvocationContext) (agent.LiveSession, error) {
+func (f *Flow) RunLive(ctx agent.InvocationContext) (agent.LiveSession, iter.Seq2[*session.Event, error], error) {
 	clientProvider, ok := f.Model.(interface {
 		Client() *genai.Client
 	})
 	if !ok {
-		return nil, fmt.Errorf("model does not support live connection")
+		return nil, nil, fmt.Errorf("model does not support live connection")
 	}
 	client := clientProvider.Client()
 
 	runCfg := runconfig.FromContext(ctx)
 	if runCfg == nil || runCfg.Live == nil {
-		return nil, fmt.Errorf("live run config not found")
+		return nil, nil, fmt.Errorf("live run config not found")
 	}
 
 	liveCfg, ok := runCfg.Live.(*agent.LiveRunConfig)
 	if !ok {
-		return nil, fmt.Errorf("invalid live run config type")
+		return nil, nil, fmt.Errorf("invalid live run config type")
 	}
 
 	sess := newLiveSessionImpl()
@@ -401,7 +407,7 @@ func (f *Flow) RunLive(ctx agent.InvocationContext) (agent.LiveSession, error) {
 		}
 	}()
 
-	return sess, nil
+	return sess, sess.recvIter(), nil
 }
 
 func (f *Flow) runOneStep(ctx agent.InvocationContext) iter.Seq2[*session.Event, error] {

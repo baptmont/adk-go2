@@ -307,36 +307,13 @@ func (s *runnerLiveSession) Send(req agent.LiveRequest) error {
 	return nil
 }
 
-func (s *runnerLiveSession) Recv() (*session.Event, error) {
-	event, err := s.sess.Recv()
-	if err != nil {
-		return nil, err
-	}
 
-	if s.r.pluginManager != nil {
-		modifiedEvent, err := s.r.pluginManager.RunOnEventCallback(s.iCtx, event)
-		if err != nil {
-			return nil, err
-		}
-		if modifiedEvent != nil {
-			event = modifiedEvent
-		}
-	}
-
-	if !event.LLMResponse.Partial && !hasInlineData(event) {
-		if err := s.r.sessionService.AppendEvent(s.iCtx, s.storedSession, event); err != nil {
-			return nil, fmt.Errorf("failed to add event to session: %w", err)
-		}
-	}
-
-	return event, nil
-}
 
 func (s *runnerLiveSession) Close() error {
 	return s.sess.Close()
 }
 
-func (r *Runner) RunLive(ctx context.Context, userID, sessionID string, cfg agent.LiveRunConfig, opts ...RunOption) (agent.LiveSession, error) {
+func (r *Runner) RunLive(ctx context.Context, userID, sessionID string, cfg agent.LiveRunConfig, opts ...RunOption) (agent.LiveSession, iter.Seq2[*session.Event, error], error) {
 	options := runOptions{}
 	for _, opt := range opts {
 		opt(&options)
@@ -350,7 +327,7 @@ func (r *Runner) RunLive(ctx context.Context, userID, sessionID string, cfg agen
 	})
 	if err != nil {
 		if !r.autoCreateSession {
-			return nil, err
+			return nil, nil, err
 		}
 		createResp, err := r.sessionService.Create(ctx, &session.CreateRequest{
 			AppName:   r.appName,
@@ -358,7 +335,7 @@ func (r *Runner) RunLive(ctx context.Context, userID, sessionID string, cfg agen
 			SessionID: sessionID,
 		})
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		storedSession = createResp.Session
 	} else {
@@ -368,12 +345,12 @@ func (r *Runner) RunLive(ctx context.Context, userID, sessionID string, cfg agen
 	// msg is nil for Live run as it's streaming
 	agentToRun, err := r.findAgentToRun(storedSession, nil)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	liveAgent, ok := agentToRun.(agent.LiveAgent)
 	if !ok {
-		return nil, fmt.Errorf("agent %s does not support Live Run", agentToRun.Name())
+		return nil, nil, fmt.Errorf("agent %s does not support Live Run", agentToRun.Name())
 	}
 
 	ctx = parentmap.ToContext(ctx, r.parents)
@@ -411,9 +388,46 @@ func (r *Runner) RunLive(ctx context.Context, userID, sessionID string, cfg agen
 		UserContent: nil,
 	})
 
-	agentSess, err := liveAgent.RunLive(iCtx)
+	agentSess, innerIter, err := liveAgent.RunLive(iCtx)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
+	}
+
+	wrappedIter := func(yield func(*session.Event, error) bool) {
+		for event, err := range innerIter {
+			if err != nil {
+				if !yield(nil, err) {
+					return
+				}
+				continue
+			}
+
+			if r.pluginManager != nil {
+				modifiedEvent, pluginErr := r.pluginManager.RunOnEventCallback(iCtx, event)
+				if pluginErr != nil {
+					if !yield(nil, pluginErr) {
+						return
+					}
+					continue
+				}
+				if modifiedEvent != nil {
+					event = modifiedEvent
+				}
+			}
+
+			if !event.LLMResponse.Partial && !hasInlineData(event) {
+				if err := r.sessionService.AppendEvent(iCtx, storedSession, event); err != nil {
+					if !yield(nil, fmt.Errorf("failed to add event to session: %w", err)) {
+						return
+					}
+					continue
+				}
+			}
+
+			if !yield(event, nil) {
+				return
+			}
+		}
 	}
 
 	return &runnerLiveSession{
@@ -421,7 +435,7 @@ func (r *Runner) RunLive(ctx context.Context, userID, sessionID string, cfg agen
 		r:             r,
 		iCtx:          iCtx,
 		storedSession: storedSession,
-	}, nil
+	}, wrappedIter, nil
 }
 
 func (r *Runner) appendMessageToSession(ctx agent.InvocationContext, storedSession session.Session, msg *genai.Content, saveInputBlobsAsArtifacts bool, pluginManager *plugininternal.PluginManager, stateDelta map[string]any) (agent.InvocationContext, error) {

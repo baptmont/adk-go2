@@ -393,29 +393,9 @@ func (a *llmAgent) run(ctx agent.InvocationContext) iter.Seq2[*session.Event, er
 	}
 }
 
-type llmAgentLiveSession struct {
-	sess agent.LiveSession
-	a    *llmAgent
-}
 
-func (s *llmAgentLiveSession) Send(req agent.LiveRequest) error {
-	return s.sess.Send(req)
-}
 
-func (s *llmAgentLiveSession) Recv() (*session.Event, error) {
-	ev, err := s.sess.Recv()
-	if err != nil {
-		return nil, err
-	}
-	s.a.maybeSaveOutputToState(ev)
-	return ev, nil
-}
-
-func (s *llmAgentLiveSession) Close() error {
-	return s.sess.Close()
-}
-
-func (a *llmAgent) RunLive(ctx agent.InvocationContext) (agent.LiveSession, error) {
+func (a *llmAgent) RunLive(ctx agent.InvocationContext) (agent.LiveSession, iter.Seq2[*session.Event, error], error) {
 	ctx = icontext.NewInvocationContext(ctx, icontext.InvocationContextParams{
 		Artifacts:    ctx.Artifacts(),
 		Memory:       ctx.Memory(),
@@ -439,12 +419,23 @@ func (a *llmAgent) RunLive(ctx agent.InvocationContext) (agent.LiveSession, erro
 		OnToolErrorCallbacks:  a.onToolErrorCallbacks,
 	}
 
-	sess, err := f.RunLive(ctx)
+	sess, innerIter, err := f.RunLive(ctx)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
-	return &llmAgentLiveSession{sess: sess, a: a}, nil
+	wrappedIter := func(yield func(*session.Event, error) bool) {
+		for ev, err := range innerIter {
+			if err == nil {
+				a.maybeSaveOutputToState(ev)
+			}
+			if !yield(ev, err) {
+				return
+			}
+		}
+	}
+
+	return sess, wrappedIter, nil
 }
 
 // maybeSaveOutputToState saves the model output to state if needed. skip if the event

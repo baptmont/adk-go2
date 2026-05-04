@@ -18,7 +18,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 	"time"
 
@@ -259,7 +258,7 @@ func (c *RuntimeAPIController) RunLiveHandler(rw http.ResponseWriter, req *http.
 	}
 
 	// Read from Runner and write back to client over the WebSocket
-	liveSession, err := r.RunLive(req.Context(), userID, sessionID, agent.LiveRunConfig{
+	liveSession, eventIter, err := r.RunLive(req.Context(), userID, sessionID, agent.LiveRunConfig{
 		MaxLLMCalls:        100, // Reasonable default
 		ResponseModalities: []genai.Modality{genai.ModalityAudio},
 		SpeechConfig: &genai.SpeechConfig{
@@ -324,13 +323,10 @@ func (c *RuntimeAPIController) RunLiveHandler(rw http.ResponseWriter, req *http.
 		}
 	}()
 
-	for {
-		event, err := liveSession.Recv()
+	for event, err := range eventIter {
 		if err != nil {
-			if err != io.EOF {
-				fmt.Printf("RunLive failed: %v\n", err)
-				ws.WriteMessage(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.CloseInternalServerErr, err.Error()))
-			}
+			fmt.Printf("RunLive failed: %v\n", err)
+			ws.WriteMessage(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.CloseInternalServerErr, err.Error()))
 			break
 		}
 
