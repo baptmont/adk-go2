@@ -247,11 +247,13 @@ func (f *Flow) RunLive(ctx agent.InvocationContext) (agent.LiveSession, iter.Seq
 		}
 
 		liveConnectConfig := &genai.LiveConnectConfig{
-			ResponseModalities: liveCfg.ResponseModalities,
-			SpeechConfig:       liveCfg.SpeechConfig,
-			SystemInstruction:  nreq.Config.SystemInstruction,
-			Tools:              nreq.Config.Tools,
-			SessionResumption:  liveCfg.SessionResumption,
+			ResponseModalities:       liveCfg.ResponseModalities,
+			SpeechConfig:             liveCfg.SpeechConfig,
+			SystemInstruction:        nreq.Config.SystemInstruction,
+			Tools:                    nreq.Config.Tools,
+			SessionResumption:        liveCfg.SessionResumption,
+			InputAudioTranscription:  liveCfg.InputAudioTranscription,
+			OutputAudioTranscription: liveCfg.OutputAudioTranscription,
 		}
 
 		if iCtx, ok := ctx.(*icontext.InvocationContext); ok {
@@ -278,14 +280,15 @@ func (f *Flow) RunLive(ctx agent.InvocationContext) (agent.LiveSession, iter.Seq
 		errChan := make(chan error)
 
 		fmt.Printf("sending preprocessed content %d\n", len(nreq.Contents))
+		// genai seems to be missing initial_history_in_client_content flag
 		// Send preprocessed content directly to model if any exists after early preprocessing
-		if len(nreq.Contents) > 0 {
+		/*if len(nreq.Contents) > 0 {
 			if err := liveConn.SendHistory(ctx, nreq.Contents); err != nil {
 				fmt.Printf("failed to send history: %v\n", err)
 				sess.pushError(err)
 				return
 			}
-		}
+		}*/
 
 		// Reading from model loop
 		go func() {

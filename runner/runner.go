@@ -307,8 +307,6 @@ func (s *runnerLiveSession) Send(req agent.LiveRequest) error {
 	return nil
 }
 
-
-
 func (s *runnerLiveSession) Close() error {
 	return s.sess.Close()
 }
@@ -356,11 +354,6 @@ func (r *Runner) RunLive(ctx context.Context, userID, sessionID string, cfg agen
 	agentToRun, err := r.findAgentToRun(storedSession, nil)
 	if err != nil {
 		return nil, nil, err
-	}
-
-	liveAgent, ok := agentToRun.(agent.LiveAgent)
-	if !ok {
-		return nil, nil, fmt.Errorf("agent %s does not support Live Run", agentToRun.Name())
 	}
 
 	ctx = parentmap.ToContext(ctx, r.parents)
@@ -420,7 +413,7 @@ func (r *Runner) RunLive(ctx context.Context, userID, sessionID string, cfg agen
 		}
 	}
 
-	agentSess, innerIter, err := liveAgent.RunLive(iCtx)
+	agentSess, innerIter, err := agentToRun.RunLive(iCtx)
 	if err != nil {
 		return nil, nil, err
 	}

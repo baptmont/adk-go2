@@ -36,8 +36,11 @@ import (
 )
 
 func main() {
+	log.SetOutput(os.Stdout)
 	ctx := context.Background()
 
+	// gemini-3.1-flash-live-preview
+	// gemini-2.5-flash-native-audio-preview-12-2025
 	model, err := gemini.NewModel(ctx, "gemini-3.1-flash-live-preview", &genai.ClientConfig{
 		APIKey: os.Getenv("GOOGLE_API_KEY"),
 	})

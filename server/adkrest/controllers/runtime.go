@@ -259,15 +259,8 @@ func (c *RuntimeAPIController) RunLiveHandler(rw http.ResponseWriter, req *http.
 
 	// Read from Runner and write back to client over the WebSocket
 	liveSession, eventIter, err := r.RunLive(req.Context(), userID, sessionID, agent.LiveRunConfig{
-		MaxLLMCalls:        100, // Reasonable default
-		ResponseModalities: []genai.Modality{genai.ModalityAudio},
-		SpeechConfig: &genai.SpeechConfig{
-			VoiceConfig: &genai.VoiceConfig{
-				PrebuiltVoiceConfig: &genai.PrebuiltVoiceConfig{
-					VoiceName: "Aoede",
-				},
-			},
-		},
+		MaxLLMCalls:              100, // Reasonable default
+		ResponseModalities:       []genai.Modality{genai.ModalityAudio},
 		InputAudioTranscription:  &genai.AudioTranscriptionConfig{},
 		OutputAudioTranscription: &genai.AudioTranscriptionConfig{},
 	})

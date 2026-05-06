@@ -99,6 +99,7 @@ func New(cfg Config) (agent.Agent, error) {
 		SubAgents:            cfg.SubAgents,
 		BeforeAgentCallbacks: cfg.BeforeAgentCallbacks,
 		Run:                  a.run,
+		RunLive:              a.runLive,
 		AfterAgentCallbacks:  cfg.AfterAgentCallbacks,
 	})
 	if err != nil {
@@ -395,7 +396,7 @@ func (a *llmAgent) run(ctx agent.InvocationContext) iter.Seq2[*session.Event, er
 
 
 
-func (a *llmAgent) RunLive(ctx agent.InvocationContext) (agent.LiveSession, iter.Seq2[*session.Event, error], error) {
+func (a *llmAgent) runLive(ctx agent.InvocationContext) (agent.LiveSession, iter.Seq2[*session.Event, error], error) {
 	ctx = icontext.NewInvocationContext(ctx, icontext.InvocationContextParams{
 		Artifacts:    ctx.Artifacts(),
 		Memory:       ctx.Memory(),
