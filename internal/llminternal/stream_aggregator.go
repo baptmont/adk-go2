@@ -37,6 +37,8 @@ type streamingResponseAggregator struct {
 	citationMetadata  *genai.CitationMetadata
 	response          *model.LLMResponse
 
+	currentThoughtSignature []byte
+
 	sequence             []*genai.Part
 	currentTextBuffer    string
 	currentTextIsThought bool
@@ -102,6 +104,9 @@ func (s *streamingResponseAggregator) aggregateResponse(llmResponse *model.LLMRe
 		if reflect.ValueOf(*part).IsZero() {
 			continue
 		}
+		if len(part.ThoughtSignature) > 0 {
+			s.currentThoughtSignature = part.ThoughtSignature
+		}
 		if part.Text != "" {
 			if s.currentTextBuffer != "" && part.Thought != s.currentTextIsThought {
 				s.flushTextBufferToSequence()
@@ -135,6 +140,10 @@ func (s *streamingResponseAggregator) processFunctionCallPart(part *genai.Part) 
 	} else {
 		if part.FunctionCall.Name != "" {
 			s.flushTextBufferToSequence()
+			if part.ThoughtSignature == nil && s.currentThoughtSignature != nil {
+				part.ThoughtSignature = s.currentThoughtSignature
+			}
+			s.currentThoughtSignature = nil
 			s.sequence = append(s.sequence, part)
 		}
 	}
@@ -303,16 +312,8 @@ func (s *streamingResponseAggregator) Close() *model.LLMResponse {
 		errorCode := ""
 		errorMessage := ""
 		if s.finishReason != genai.FinishReasonStop {
-			if s.response.ErrorCode != "" {
-				errorCode = s.response.ErrorCode
-			} else {
-				errorCode = "error"
-			}
-			if s.response.ErrorMessage != "" {
-				errorMessage = s.response.ErrorMessage
-			} else {
-				errorMessage = "error"
-			}
+			errorCode = s.response.ErrorCode
+			errorMessage = s.response.ErrorMessage
 		}
 
 		return &model.LLMResponse{
@@ -325,6 +326,7 @@ func (s *streamingResponseAggregator) Close() *model.LLMResponse {
 			CitationMetadata:  s.citationMetadata,
 			ErrorCode:         errorCode,
 			ErrorMessage:      errorMessage,
+			FinishReason:      s.finishReason,
 		}
 	}
 	return nil

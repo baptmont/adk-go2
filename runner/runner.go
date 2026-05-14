@@ -359,7 +359,7 @@ func (r *Runner) RunLive(ctx context.Context, userID, sessionID string, cfg agen
 	if err != nil {
 		return nil, nil, err
 	}
-	
+
 	lAgent, ok := agentToRun.(liveAgent)
 	if !ok {
 		return nil, nil, fmt.Errorf("agent %s does not support Live Run", agentToRun.Name())
@@ -591,7 +591,7 @@ func (r *Runner) appendMessageToSession(ctx agent.InvocationContext, storedSessi
 // session history.
 func (r *Runner) findAgentToRun(session session.Session, msg *genai.Content) (agent.Agent, error) {
 	if event := handleUserFunctionCallResponse(session.Events(), msg); event != nil {
-		subAgent := findAgent(r.rootAgent, event.Author)
+		subAgent := r.rootAgent.FindAgent(event.Author)
 		if subAgent != nil {
 			return subAgent, nil
 		}
@@ -606,7 +606,7 @@ func (r *Runner) findAgentToRun(session session.Session, msg *genai.Content) (ag
 			continue
 		}
 
-		subAgent := findAgent(r.rootAgent, event.Author)
+		subAgent := r.rootAgent.FindAgent(event.Author)
 		// Agent not found, continue looking for the other event.
 		if subAgent == nil {
 			log.Printf("Event from an unknown agent: %s, event id: %s", event.Author, event.ID)
@@ -663,19 +663,6 @@ func (r *Runner) isTransferableAcrossAgentTree(agentToRun agent.Agent) bool {
 	}
 
 	return true
-}
-
-func findAgent(curAgent agent.Agent, targetName string) agent.Agent {
-	if curAgent == nil || curAgent.Name() == targetName {
-		return curAgent
-	}
-
-	for _, subAgent := range curAgent.SubAgents() {
-		if agent := findAgent(subAgent, targetName); agent != nil {
-			return agent
-		}
-	}
-	return nil
 }
 
 func hasInlineData(event *session.Event) bool {
