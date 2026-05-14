@@ -201,6 +201,7 @@ func TestRunSSEHandler(t *testing.T) {
 				nil,
 				10*time.Second,
 				runner.PluginConfig{},
+				false,
 			)
 
 			// Create request
