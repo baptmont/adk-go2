@@ -29,18 +29,32 @@ type LiveConnection struct {
 	// Using the correct Session type from the GenAI SDK.
 	sdkSession *genai.Session
 
+	modelName               string
+	backend                 genai.Backend
 	inputTranscriptionText  string
 	outputTranscriptionText string
 	bufferedResponses       []*model.LLMResponse
 }
 
 // NewLiveConnection creates a new LiveConnection.
-func NewLiveConnection(session *genai.Session) *LiveConnection {
-	return &LiveConnection{sdkSession: session}
+func NewLiveConnection(session *genai.Session, modelName string, backend genai.Backend) *LiveConnection {
+	return &LiveConnection{
+		sdkSession: session,
+		modelName:  modelName,
+		backend:    backend,
+	}
 }
 
 // SendHistory sends the conversation history to prime the session.
 func (c *LiveConnection) SendHistory(ctx context.Context, history []*genai.Content) error {
+	// TODO: genai seems to be missing initial_history_in_client_content flag
+	isGemini31 := strings.Contains(c.modelName, "gemini-3.1")
+	if isGemini31 {
+		fmt.Printf("skipping sending history for gemini 3.1\n")
+		return nil
+	}
+	fmt.Printf("sending preprocessed content %d\n", len(history))
+
 	var filteredHistory []*genai.Content
 	for _, content := range history {
 		if content == nil {
@@ -65,7 +79,7 @@ func (c *LiveConnection) SendHistory(ctx context.Context, history []*genai.Conte
 		}
 	}
 	fmt.Printf("sending history: of size %d\n", len(filteredHistory))
-	turnComplete := false
+	turnComplete := len(filteredHistory) > 0 && filteredHistory[len(filteredHistory)-1].Role == "user"
 	if len(filteredHistory) > 0 {
 		err := c.sdkSession.SendClientContent(genai.LiveClientContentInput{
 			Turns:        filteredHistory,
@@ -100,7 +114,9 @@ func (c *LiveConnection) SendContent(ctx context.Context, content *genai.Content
 		}
 		fmt.Printf("sending tool response\n")
 	} else {
-		if len(content.Parts) == 1 && content.Parts[0].Text != "" {
+		isGemini31 := strings.Contains(c.modelName, "gemini-3.1")
+		isGeminiAPI := c.backend == genai.BackendGeminiAPI
+		if isGemini31 && isGeminiAPI && len(content.Parts) == 1 && content.Parts[0].Text != "" {
 			fmt.Printf("Attempting to send text via SendRealtimeInput\n")
 			err := c.sdkSession.SendRealtimeInput(genai.LiveRealtimeInput{
 				Text: content.Parts[0].Text,
@@ -141,15 +157,21 @@ func (c *LiveConnection) SendRealtime(ctx context.Context, input any) error {
 			}
 		}
 
-		if strings.HasPrefix(v.MIMEType, "image/") {
-			fmt.Printf("sending image (%s)\n", v.MIMEType)
+		isGemini31 := strings.Contains(c.modelName, "gemini-3.1")
+		isGeminiAPI := c.backend == genai.BackendGeminiAPI
+		if isGemini31 && isGeminiAPI {
+			if strings.HasPrefix(v.MIMEType, "image/") {
+				return c.sdkSession.SendRealtimeInput(genai.LiveRealtimeInput{
+					Video: v,
+				})
+			}
 			return c.sdkSession.SendRealtimeInput(genai.LiveRealtimeInput{
-				Video: v,
+				Audio: v,
 			})
 		}
 
 		return c.sdkSession.SendRealtimeInput(genai.LiveRealtimeInput{
-			Audio: v,
+			Media: v,
 		})
 	case *genai.ActivityStart:
 		fmt.Printf("sending activity start\n")

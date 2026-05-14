@@ -80,6 +80,7 @@ let currentInputTranscriptionId = null;
 let currentInputTranscriptionElement = null;
 let currentOutputTranscriptionId = null;
 let currentOutputTranscriptionElement = null;
+let lastAgentBubbleElement = null;
 let inputTranscriptionFinished = false; // Track if input transcription is complete for this turn
 let hasOutputTranscriptionInTurn = false; // Track if output transcription delivered the response
 
@@ -516,6 +517,7 @@ function connectWebsocket() {
       }
 
       // Keep the partial message but mark it as interrupted
+      let markedInterrupted = false;
       if (currentBubbleElement) {
         const textElement = currentBubbleElement.querySelector(".bubble-text");
 
@@ -527,6 +529,7 @@ function connectWebsocket() {
 
         // Add interrupted marker
         currentBubbleElement.classList.add("interrupted");
+        markedInterrupted = true;
       }
 
       // Keep the partial output transcription but mark it as interrupted
@@ -541,6 +544,12 @@ function connectWebsocket() {
 
         // Add interrupted marker
         currentOutputTranscriptionElement.classList.add("interrupted");
+        markedInterrupted = true;
+      }
+
+      // Fallback to the last agent bubble element if the active trackers were already finalized
+      if (!markedInterrupted && lastAgentBubbleElement) {
+        lastAgentBubbleElement.classList.add("interrupted");
       }
 
       // Reset state so new content creates a new bubble
@@ -576,6 +585,7 @@ function connectWebsocket() {
           currentInputTranscriptionElement.classList.add("transcription");
 
           appendMessage(currentInputTranscriptionElement);
+          lastAgentBubbleElement = null;
         } else {
           // Update existing transcription bubble only if model hasn't started responding
           // This prevents late partial transcriptions from overwriting complete ones
@@ -638,6 +648,7 @@ function connectWebsocket() {
           currentOutputTranscriptionElement.classList.add("transcription");
 
           appendMessage(currentOutputTranscriptionElement);
+          lastAgentBubbleElement = currentOutputTranscriptionElement;
         } else {
           // Update existing transcription bubble
           if (isFinished) {
@@ -726,7 +737,7 @@ function connectWebsocket() {
           const isUser = (adkEvent.content.role === "user" || adkEvent.author === "user");
 
           // Add a new message bubble for a new turn, or if role changed
-          if (currentMessageId == null || (currentBubbleElement && currentBubbleElement.classList.contains("user") !== isUser)) {
+          if (currentMessageId == null || currentBubbleElement == null || currentBubbleElement.classList.contains("user") !== isUser) {
             // Finalize previous bubble if role changed
             if (currentBubbleElement && currentBubbleElement.classList.contains("user") !== isUser) {
               const textElement = currentBubbleElement.querySelector(".bubble-text");
@@ -740,6 +751,9 @@ function connectWebsocket() {
             currentBubbleElement = createMessageBubble(part.text, isUser, true);
             currentBubbleElement.id = currentMessageId;
             appendMessage(currentBubbleElement);
+            if (!isUser) {
+              lastAgentBubbleElement = currentBubbleElement;
+            }
           } else {
             // Update the existing message bubble with accumulated text
             const existingText = currentBubbleElement.querySelector(".bubble-text").textContent;
@@ -756,15 +770,17 @@ function connectWebsocket() {
   };
 
   // Handle connection close
-  websocket.onclose = function () {
-    console.log("WebSocket connection closed.");
+  websocket.onclose = function (e) {
+    console.log("WebSocket connection closed.", e);
     updateConnectionStatus(false);
     document.getElementById("sendButton").disabled = true;
-    addSystemMessage("Connection closed. Reconnecting in 5 seconds...");
+    const reason = e && e.reason ? e.reason + " - " : "";
+    addSystemMessage(`${reason}Connection closed. Reconnecting in 5 seconds...`);
 
     // Log to console
     addConsoleEntry('error', 'WebSocket Disconnected', {
-      status: 'Connection closed',
+      status: e && e.reason ? e.reason : "Connection closed",
+      code: e ? e.code : null,
       reconnecting: true,
       reconnectDelay: '5 seconds'
     }, '🔌', 'system');
@@ -821,6 +837,7 @@ function addSubmitHandler() {
 function sendMessage(message) {
   ensureAudioPlayerStarted();
   if (websocket && websocket.readyState == WebSocket.OPEN) {
+    lastAgentBubbleElement = null;
     const jsonMessage = JSON.stringify({
       content: {
         role: "user",
@@ -1113,8 +1130,8 @@ function startStreamingLoop() {
   streamVideoButton.classList.add("active");
   addSystemMessage("Video streaming started");
 
-  // 2 FPS = 500ms interval
-  videoStreamInterval = setInterval(captureAndSendFrame, 500);
+  // 1 FPS = 1000ms interval
+  videoStreamInterval = setInterval(captureAndSendFrame, 1000);
 }
 
 // Event listeners

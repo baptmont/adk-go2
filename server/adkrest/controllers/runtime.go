@@ -251,9 +251,23 @@ func (c *RuntimeAPIController) RunLiveHandler(rw http.ResponseWriter, req *http.
 	}
 	defer ws.Close()
 
+	sendClose := func(code int, reason string) {
+		ws.WriteMessage(websocket.CloseMessage, websocket.FormatCloseMessage(code, reason))
+		ws.SetReadDeadline(time.Now().Add(time.Second))
+		for {
+			if _, _, err := ws.ReadMessage(); err != nil {
+				break
+			}
+		}
+	}
+
 	r, _, err := c.getRunner(models.RunAgentRequest{AppName: appName, UserId: userID, SessionId: sessionID})
 	if err != nil {
-		ws.WriteMessage(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.CloseInternalServerErr, err.Error()))
+		closeReason := err.Error()
+		if _, loadErr := c.agentLoader.LoadAgent(appName); loadErr != nil {
+			closeReason = fmt.Sprintf("agent %s not found", appName)
+		}
+		sendClose(websocket.CloseInternalServerErr, closeReason)
 		return nil
 	}
 
@@ -265,7 +279,7 @@ func (c *RuntimeAPIController) RunLiveHandler(rw http.ResponseWriter, req *http.
 		OutputAudioTranscription: &genai.AudioTranscriptionConfig{},
 	})
 	if err != nil {
-		ws.WriteMessage(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.CloseInternalServerErr, err.Error()))
+		sendClose(websocket.CloseInternalServerErr, err.Error())
 		return nil
 	}
 	defer liveSession.Close()

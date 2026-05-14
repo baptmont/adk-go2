@@ -353,7 +353,7 @@ func (f *Flow) RunLive(ctx agent.InvocationContext) (agent.LiveSession, iter.Seq
 				return
 			}
 
-			liveConn := googlellm.NewLiveConnection(liveSession)
+			liveConn := googlellm.NewLiveConnection(liveSession, f.Model.Name(), googlellm.GetGoogleLLMVariant(f.Model))
 
 			cleanup := func() {
 				cancelConn()
@@ -362,17 +362,15 @@ func (f *Flow) RunLive(ctx agent.InvocationContext) (agent.LiveSession, iter.Seq
 
 			eventsChan := make(chan *session.Event)
 			errChan := make(chan error)
-
-			fmt.Printf("sending preprocessed content %d(disabled)\n", len(nreq.Contents))
-			// genai seems to be missing initial_history_in_client_content flag
+			
 			// Send preprocessed content directly to model if any exists after early preprocessing
-			/*if len(nreq.Contents) > 0 {
+			if len(nreq.Contents) > 0 {
 				if err := liveConn.SendHistory(ctx, nreq.Contents); err != nil {
 					fmt.Printf("failed to send history: %v\n", err)
 					sess.pushError(err)
 					return
 				}
-			}*/
+			}
 
 			// Reading from model loop
 			go func() {
