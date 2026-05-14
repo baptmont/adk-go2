@@ -274,11 +274,6 @@ func (f *Flow) RunLive(ctx agent.InvocationContext) (agent.LiveSession, iter.Seq
 		return nil, nil, fmt.Errorf("live run config not found")
 	}
 
-	liveCfg, ok := runCfg.Live.(*agent.LiveRunConfig)
-	if !ok {
-		return nil, nil, fmt.Errorf("invalid live run config type")
-	}
-
 	sess := newLiveSessionImpl()
 
 	go func() {
@@ -300,13 +295,13 @@ func (f *Flow) RunLive(ctx agent.InvocationContext) (agent.LiveSession, iter.Seq
 		}
 
 		liveConnectConfig := &genai.LiveConnectConfig{
-			ResponseModalities:       liveCfg.ResponseModalities,
-			SpeechConfig:             liveCfg.SpeechConfig,
+			ResponseModalities:       runCfg.Live.ResponseModalities,
+			SpeechConfig:             runCfg.Live.SpeechConfig,
 			SystemInstruction:        nreq.Config.SystemInstruction,
 			Tools:                    nreq.Config.Tools,
-			SessionResumption:        liveCfg.SessionResumption,
-			InputAudioTranscription:  liveCfg.InputAudioTranscription,
-			OutputAudioTranscription: liveCfg.OutputAudioTranscription,
+			SessionResumption:        runCfg.Live.SessionResumption,
+			InputAudioTranscription:  runCfg.Live.InputAudioTranscription,
+			OutputAudioTranscription: runCfg.Live.OutputAudioTranscription,
 		}
 
 		isResumable := func(err error) bool {
@@ -387,7 +382,7 @@ func (f *Flow) RunLive(ctx agent.InvocationContext) (agent.LiveSession, iter.Seq
 								iCtx.SetLiveSessionResumptionHandle(resp.SessionResumptionHandle)
 							}
 						}
-						if liveCfg.SaveLiveBlob && resp.Content != nil {
+						if runCfg.Live.SaveLiveBlob && resp.Content != nil {
 							for _, part := range resp.Content.Parts {
 								if part.InlineData != nil && strings.HasPrefix(part.InlineData.MIMEType, "audio/") {
 									sess.audioMgr.CacheOutput(part.InlineData.Data, part.InlineData.MIMEType)
@@ -444,7 +439,7 @@ func (f *Flow) RunLive(ctx agent.InvocationContext) (agent.LiveSession, iter.Seq
 						return
 					}
 					// Flush caches if needed
-					if liveCfg.SaveLiveBlob {
+					if runCfg.Live.SaveLiveBlob {
 						var flushUser, flushModel bool
 						if ev.LLMResponse.Interrupted {
 							flushModel = true
