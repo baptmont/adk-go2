@@ -86,6 +86,21 @@ func fixTypeMismatches(n *yaml.Node) {
 						},
 					}
 				}
+			case "llmresponse":
+				if valueNode.Kind == yaml.MappingNode {
+					origCopy := &yaml.Node{
+						Kind:    valueNode.Kind,
+						Style:   valueNode.Style,
+						Tag:     valueNode.Tag,
+						Value:   valueNode.Value,
+						Content: valueNode.Content,
+					}
+					valueNode.Kind = yaml.SequenceNode
+					valueNode.Tag = "!!seq"
+					valueNode.Value = ""
+					valueNode.Content = []*yaml.Node{origCopy}
+				}
+				keyNode.Value = "llmresponses"
 			}
 
 			// Recurse into the value to catch nested structures
