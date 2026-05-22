@@ -130,7 +130,7 @@ func (p *replayPlugin) beforeModel(ctx agent.CallbackContext, req *model.LLMRequ
 	}
 
 	if len(recording.LLMResponses) == 0 {
-		return nil, fmt.Errorf("no LLM responses found in recording")
+		return nil, fmt.Errorf("no LLM responses found in recording for agent %q", agentName)
 	}
 
 	return recording.LLMResponses[0], nil
