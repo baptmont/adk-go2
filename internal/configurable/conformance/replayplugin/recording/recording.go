@@ -65,4 +65,3 @@ type ToolRecording struct {
 	// Required. The tool response.
 	ToolResponse *genai.FunctionResponse `yaml:"tool_response,omitempty"`
 }
-

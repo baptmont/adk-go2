@@ -57,6 +57,7 @@ func getUserID(ctx tool.Context, args ValidateEmailArgs) (int, error) {
 	// 4. Modulo 10000 to keep it in range
 	return int(result % 10000), nil
 }
+
 type CreateBookingArgs struct {
 	UserID      int    `json:"user_id"`
 	IsConfirmed bool   `json:"is_confirmed"`
