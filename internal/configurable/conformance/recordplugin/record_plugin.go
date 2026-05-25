@@ -453,10 +453,11 @@ func findKeyNode(node *yaml.Node, key string) *yaml.Node {
 
 // cleanYAMLNode is the a post-processor for the recorded YAML representation.
 // It performs a deep recursive AST traversal to:
-//   Normalize Go-serialized lowercase keys back to their strict canonical snake_case.
-//   Auto-extract and simplify standard system_instruction structures to single scalar strings.
-//   Coalesce raw integer-sequence thought_signatures back to compact Base64 strings.
-//   Prune all default empty fields, empty sequences, and null properties outside user tool arguments.
+//
+//	Normalize Go-serialized lowercase keys back to their strict canonical snake_case.
+//	Auto-extract and simplify standard system_instruction structures to single scalar strings.
+//	Coalesce raw integer-sequence thought_signatures back to compact Base64 strings.
+//	Prune all default empty fields, empty sequences, and null properties outside user tool arguments.
 func cleanYAMLNode(node *yaml.Node, inToolArgs bool) {
 	switch node.Kind {
 	case yaml.DocumentNode, yaml.SequenceNode:

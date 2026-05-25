@@ -202,7 +202,7 @@ func TestRecordPlugin(t *testing.T) {
 	t.Run("PathValidation", func(t *testing.T) {
 		tempDir := t.TempDir()
 		safeDir := filepath.Join(tempDir, "safe")
-		_ = os.Mkdir(safeDir, 0755)
+		_ = os.Mkdir(safeDir, 0o755)
 
 		p, mockSession, _ := setup(t, safeDir)
 

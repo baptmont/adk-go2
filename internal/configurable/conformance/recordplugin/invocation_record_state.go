@@ -33,7 +33,7 @@ type invocationRecordState struct {
 	recordings []recording.Recording
 
 	// Active/pending LLM request mappings
-	pendingLLMRequest  *model.LLMRequest
+	pendingLLMRequest   *model.LLMRequest
 	pendingLLMResponses []*model.LLMResponse
 
 	// Active/pending Tool call mappings keyed by function_call_id
