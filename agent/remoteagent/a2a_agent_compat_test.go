@@ -81,7 +81,9 @@ func TestCompat_OldExecutor_Direct(t *testing.T) {
 		Message:   legacyA2A.NewMessage(legacyA2A.MessageRoleUser, a2av0.FromV1Part(v2a2a.NewTextPart("hi"))),
 	}
 	queue := &mockQueue{}
-	if err := executor.Execute(t.Context(), reqCtx, queue); err != nil {
+	ctx, callCtx := legacyASrv.WithCallContext(t.Context(), nil)
+	callCtx.User = &legacyASrv.AuthenticatedUser{UserName: "test"}
+	if err := executor.Execute(ctx, reqCtx, queue); err != nil {
 		t.Fatalf("executor.Execute() error = %v", err)
 	}
 
@@ -509,9 +511,18 @@ func (e *mockV2Executor) Cancel(ctx context.Context, execCtx *v2asrv.ExecutorCon
 	}
 }
 
+type v2AuthInterceptor struct {
+	v2asrv.PassthroughCallInterceptor
+}
+
+func (i *v2AuthInterceptor) Before(ctx context.Context, callCtx *v2asrv.CallContext, req *v2asrv.Request) (context.Context, any, error) {
+	callCtx.User = v2asrv.NewAuthenticatedUser("test", nil)
+	return ctx, nil, nil
+}
+
 func startA2AServer(t *testing.T, executor *mockV2Executor) *httptest.Server {
 	t.Helper()
-	handler := v2asrv.NewHandler(executor)
+	handler := v2asrv.NewHandler(executor, v2asrv.WithCallInterceptors(&v2AuthInterceptor{}))
 	server := httptest.NewServer(v2asrv.NewJSONRPCHandler(handler))
 	t.Cleanup(server.Close)
 	return server
@@ -621,9 +632,18 @@ func (e *mockLegacyExecutor) Cleanup(ctx context.Context, reqCtx *legacyASrv.Req
 	}
 }
 
+type legacyAuthInterceptor struct {
+	legacyASrv.PassthroughCallInterceptor
+}
+
+func (i *legacyAuthInterceptor) Before(ctx context.Context, callCtx *legacyASrv.CallContext, req *legacyASrv.Request) (context.Context, error) {
+	callCtx.User = &legacyASrv.AuthenticatedUser{UserName: "test"}
+	return ctx, nil
+}
+
 func startLegacyA2AServer(t *testing.T, executor legacyASrv.AgentExecutor) *testA2AServer {
 	t.Helper()
-	handler := legacyASrv.NewHandler(executor)
+	handler := legacyASrv.NewHandler(executor, legacyASrv.WithCallInterceptor(&legacyAuthInterceptor{}))
 	server := httptest.NewServer(legacyASrv.NewJSONRPCHandler(handler))
 	return &testA2AServer{Server: server, handler: handler}
 }

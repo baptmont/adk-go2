@@ -210,7 +210,16 @@ func (e *Executor) Execute(ctx context.Context, execCtx *a2asrv.ExecutorContext)
 			}
 		}
 
-		invocationMeta := toInvocationMeta(ctx, cfg, execCtx)
+		invocationMetaPtr, err := toInvocationMeta(ctx, cfg, execCtx)
+		if err != nil {
+			yield(nil, fmt.Errorf("failed to create invocation metadata: %w", err))
+			return
+		}
+		if invocationMetaPtr == nil {
+			yield(nil, fmt.Errorf("invocation metadata not created"))
+			return
+		}
+		invocationMeta := *invocationMetaPtr
 
 		err = e.prepareSession(ctx, cfg, invocationMeta)
 		if err != nil {
@@ -288,7 +297,13 @@ func (e *Executor) cancelChildInputRequiredTasks(ctx context.Context, reqCtx *a2
 		return nil
 	}
 
-	meta := toInvocationMeta(ctx, cfg, reqCtx)
+	meta, err := toInvocationMeta(ctx, cfg, reqCtx)
+	if err != nil {
+		return fmt.Errorf("failed to create invocation metadata: %w", err)
+	}
+	if meta == nil {
+		return fmt.Errorf("invocation metadata not created")
+	}
 	getSessionResponse, err := cfg.SessionService.Get(ctx, &session.GetRequest{
 		AppName:   cfg.AppName,
 		UserID:    meta.userID,

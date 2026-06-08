@@ -16,6 +16,7 @@ package adka2a
 
 import (
 	"context"
+	"errors"
 	"maps"
 
 	"github.com/a2aproject/a2a-go/v2/a2a"
@@ -58,15 +59,17 @@ type invocationMeta struct {
 	eventMeta map[string]any
 }
 
-func toInvocationMeta(ctx context.Context, config RunnerConfig, reqCtx *a2asrv.ExecutorContext) invocationMeta {
-	userID, sessionID := "A2A_USER_"+reqCtx.ContextID, reqCtx.ContextID
-
+func toInvocationMeta(ctx context.Context, config RunnerConfig, reqCtx *a2asrv.ExecutorContext) (*invocationMeta, error) {
+	sessionID := reqCtx.ContextID
 	// a2a sdk attaches authn info to the call context, use it when provided
-	if callCtx, ok := a2asrv.CallContextFrom(ctx); ok {
-		if callCtx.User != nil && callCtx.User.Name != "" {
-			userID = callCtx.User.Name
-		}
+	callCtx, ok := a2asrv.CallContextFrom(ctx)
+	if !ok {
+		return nil, errors.New("failed to extract call context from ctx")
 	}
+	if callCtx.User == nil || callCtx.User.Name == "" {
+		return nil, errors.New("no user provided in call context")
+	}
+	userID := callCtx.User.Name
 
 	meta := map[string]any{
 		ToA2AMetaKey("app_name"):   config.AppName,
@@ -74,13 +77,13 @@ func toInvocationMeta(ctx context.Context, config RunnerConfig, reqCtx *a2asrv.E
 		ToA2AMetaKey("session_id"): sessionID,
 	}
 
-	return invocationMeta{
+	return &invocationMeta{
 		userID:    userID,
 		sessionID: sessionID,
 		agentName: config.Agent.Name(),
 		eventMeta: meta,
 		reqCtx:    reqCtx,
-	}
+	}, nil
 }
 
 func toEventMeta(meta invocationMeta, event *session.Event) (map[string]any, error) {

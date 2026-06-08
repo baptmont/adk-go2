@@ -760,7 +760,7 @@ func TestA2ARemoteAgentStreamingGeminiSuccess(t *testing.T) {
 	// Check Session Store state
 	fullSessionResp, err := serviceA.Get(ctx, &session.GetRequest{
 		AppName:   remoteAgent.Name(),
-		UserID:    "A2A_USER_" + msg.ContextID,
+		UserID:    "test",
 		SessionID: msg.ContextID,
 	})
 	if err != nil {
@@ -852,7 +852,7 @@ func TestA2ARemoteAgentStreamingGeminiError(t *testing.T) {
 	// Check Session Store state
 	fullSessionResp, err := serviceA.Get(ctx, &session.GetRequest{
 		AppName:   remoteAgent.Name(),
-		UserID:    "A2A_USER_" + msg.ContextID,
+		UserID:    "test",
 		SessionID: msg.ContextID,
 	})
 	if err != nil {

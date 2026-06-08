@@ -215,6 +215,8 @@ func TestExecutor_Execute(t *testing.T) {
 			cmpopts.IgnoreFields(a2a.TaskArtifactUpdateEvent{}, "Metadata"),
 		}
 
+		ctx := authenticatedContext(t.Context())
+
 		t.Run(tc.name, func(t *testing.T) {
 			agent, err := newEventReplayAgent(tc.events, tc.agentRunFails)
 			if err != nil {
@@ -230,7 +232,7 @@ func TestExecutor_Execute(t *testing.T) {
 			}
 
 			var executeErr error
-			for event, err := range executor.Execute(t.Context(), reqCtx) {
+			for event, err := range executor.Execute(ctx, reqCtx) {
 				if err != nil {
 					executeErr = err
 					break
@@ -281,7 +283,8 @@ func TestExecutor_Cancel(t *testing.T) {
 }
 
 func TestExecutor_SessionReuse(t *testing.T) {
-	ctx := t.Context()
+	ctx := authenticatedContext(t.Context())
+
 	agent, err := newEventReplayAgent([]*session.Event{}, nil)
 	if err != nil {
 		t.Fatalf("newEventReplayAgent() error = %v, want nil", err)
@@ -309,7 +312,10 @@ func TestExecutor_SessionReuse(t *testing.T) {
 		gotEvents = append(gotEvents, event)
 	}
 
-	meta := toInvocationMeta(ctx, toInternalRunnerConfig(config.RunnerConfig), reqCtx)
+	meta, err := toInvocationMeta(ctx, toInternalRunnerConfig(config.RunnerConfig), reqCtx)
+	if err != nil {
+		t.Fatalf("toInvocationMeta() error = %v, want nil", err)
+	}
 	sessions, err := sessionService.List(ctx, &session.ListRequest{AppName: runnerConfig.AppName, UserID: meta.userID})
 	if err != nil {
 		t.Fatalf("sessionService.List() error = %v, want nil", err)
@@ -319,7 +325,10 @@ func TestExecutor_SessionReuse(t *testing.T) {
 	}
 
 	reqCtx.ContextID = a2a.NewContextID()
-	otherContextMeta := toInvocationMeta(ctx, toInternalRunnerConfig(config.RunnerConfig), reqCtx)
+	otherContextMeta, err := toInvocationMeta(ctx, toInternalRunnerConfig(config.RunnerConfig), reqCtx)
+	if err != nil {
+		t.Fatalf("toInvocationMeta() error = %v, want nil", err)
+	}
 	if meta.sessionID == otherContextMeta.sessionID {
 		t.Fatal("want sessionID to be different for different contextIDs")
 	}
@@ -453,6 +462,7 @@ func TestExecutor_Callbacks(t *testing.T) {
 			cmpopts.IgnoreFields(a2a.TaskStatusUpdateEvent{}, "Metadata"),
 			cmpopts.IgnoreFields(a2a.TaskArtifactUpdateEvent{}, "Metadata"),
 		}
+		ctx := authenticatedContext(t.Context())
 
 		t.Run(tc.name, func(t *testing.T) {
 			agent, err := newEventReplayAgent(tc.events, nil)
@@ -471,7 +481,7 @@ func TestExecutor_Callbacks(t *testing.T) {
 			reqCtx := &a2asrv.ExecutorContext{TaskID: task.ID, ContextID: task.ContextID, Message: hiMsg, StoredTask: task}
 
 			var executeErr error
-			for event, err := range executor.Execute(t.Context(), reqCtx) {
+			for event, err := range executor.Execute(ctx, reqCtx) {
 				if err != nil {
 					executeErr = err
 					break
@@ -496,8 +506,17 @@ func TestExecutor_Callbacks(t *testing.T) {
 	}
 }
 
+type authInterceptor struct {
+	a2asrv.PassthroughCallInterceptor
+}
+
+func (a *authInterceptor) Before(ctx context.Context, callCtx *a2asrv.CallContext, req *a2asrv.Request) (context.Context, any, error) {
+	callCtx.User = a2asrv.NewAuthenticatedUser("test", nil)
+	return ctx, nil, nil
+}
+
 func startA2AServer(agentExecutor a2asrv.AgentExecutor) *httptest.Server {
-	requestHandler := a2asrv.NewHandler(agentExecutor)
+	requestHandler := a2asrv.NewHandler(agentExecutor, a2asrv.WithCallInterceptors(&authInterceptor{}))
 	return httptest.NewServer(a2asrv.NewJSONRPCHandler(requestHandler))
 }
 
@@ -549,10 +568,11 @@ func TestExecutor_Cancel_AfterEvent(t *testing.T) {
 
 	if sendErr != nil {
 		t.Fatalf("client.SendMessage() error = %v, want nil", sendErr)
-	}
+	}	
 
-	taskID := result.TaskInfo().TaskID
+	info := result.TaskInfo()
 
+	taskID := info.TaskID
 	task, err := client.CancelTask(t.Context(), &a2a.CancelTaskRequest{ID: taskID})
 	if err != nil {
 		t.Fatalf("client.CancelTask() error = %v, want nil", err)
@@ -574,6 +594,8 @@ func TestExecutor_Cancel_AfterEvent(t *testing.T) {
 func TestExecutor_Converters(t *testing.T) {
 	task := &a2a.Task{ID: a2a.NewTaskID(), ContextID: a2a.NewContextID()}
 	hiMsg := a2a.NewMessageForTask(a2a.MessageRoleUser, task, a2a.NewTextPart("hi"))
+
+	ctx := authenticatedContext(t.Context())
 
 	t.Run("A2APartConverter", func(t *testing.T) {
 		t.Run("modify input", func(t *testing.T) {
@@ -602,7 +624,7 @@ func TestExecutor_Converters(t *testing.T) {
 			})
 
 			reqCtx := &a2asrv.ExecutorContext{TaskID: task.ID, ContextID: task.ContextID, Message: hiMsg, StoredTask: task}
-			for event, err := range executor.Execute(t.Context(), reqCtx) {
+			for event, err := range executor.Execute(ctx, reqCtx) {
 				if err != nil {
 					t.Fatalf("executor.Execute() error = %v", err)
 				}
@@ -635,7 +657,7 @@ func TestExecutor_Converters(t *testing.T) {
 			})
 
 			reqCtx := &a2asrv.ExecutorContext{TaskID: task.ID, ContextID: task.ContextID, Message: hiMsg, StoredTask: task}
-			for event, err := range executor.Execute(t.Context(), reqCtx) {
+			for event, err := range executor.Execute(ctx, reqCtx) {
 				if err != nil {
 					t.Fatalf("executor.Execute() error = %v", err)
 				}
@@ -673,7 +695,7 @@ func TestExecutor_Converters(t *testing.T) {
 
 			var gotEvents []a2a.Event
 			reqCtx := &a2asrv.ExecutorContext{TaskID: task.ID, ContextID: task.ContextID, Message: hiMsg, StoredTask: task}
-			for event, err := range executor.Execute(t.Context(), reqCtx) {
+			for event, err := range executor.Execute(ctx, reqCtx) {
 				if err != nil {
 					t.Fatalf("executor.Execute() error = %v", err)
 				}
@@ -710,7 +732,7 @@ func TestExecutor_Converters(t *testing.T) {
 
 			var gotEvents []a2a.Event
 			reqCtx := &a2asrv.ExecutorContext{TaskID: task.ID, ContextID: task.ContextID, Message: hiMsg, StoredTask: task}
-			for event, err := range executor.Execute(t.Context(), reqCtx) {
+			for event, err := range executor.Execute(ctx, reqCtx) {
 				if err != nil {
 					t.Fatalf("executor.Execute() error = %v", err)
 				}
@@ -892,6 +914,8 @@ func TestExecutor_OutputArtifactPerEvent(t *testing.T) {
 		},
 	}
 
+	ctx := authenticatedContext(t.Context())
+
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			agent, _ := newEventReplayAgent(tc.events, nil)
@@ -903,7 +927,7 @@ func TestExecutor_OutputArtifactPerEvent(t *testing.T) {
 			var gotEvents []a2a.Event
 			reqCtx := &a2asrv.ExecutorContext{TaskID: task.ID, ContextID: task.ContextID, Message: hiMsg, StoredTask: task}
 
-			for event, err := range executor.Execute(t.Context(), reqCtx) {
+			for event, err := range executor.Execute(ctx, reqCtx) {
 				if err != nil {
 					t.Fatalf("executor.Execute() error = %v", err)
 				}
@@ -974,7 +998,7 @@ func TestExecutor_OutputArtifactPerEvent(t *testing.T) {
 
 func TestExecutor_RunnerProvider(t *testing.T) {
 	wantText := "Hello"
-	ctx := t.Context()
+	ctx := authenticatedContext(t.Context())
 	task := &a2a.Task{ID: a2a.NewTaskID(), ContextID: a2a.NewContextID()}
 	hiMsg := a2a.NewMessageForTask(a2a.MessageRoleUser, task, a2a.NewTextPart("hi"))
 	reqCtx := &a2asrv.ExecutorContext{TaskID: task.ID, ContextID: task.ContextID, Message: hiMsg, StoredTask: task}
@@ -1022,4 +1046,10 @@ type testRunner struct {
 
 func (r *testRunner) Run(ctx context.Context, userID, sessionID string, msg *genai.Content, cfg agent.RunConfig) iter.Seq2[*session.Event, error] {
 	return r.runFunc(ctx, userID, sessionID, msg, cfg)
+}
+
+func authenticatedContext(ctx context.Context) context.Context {
+	ctx, callCtx := a2asrv.NewCallContext(ctx, nil)
+	callCtx.User = a2asrv.NewAuthenticatedUser("test", nil)
+	return ctx
 }

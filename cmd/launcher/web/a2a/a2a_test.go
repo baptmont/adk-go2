@@ -15,6 +15,7 @@
 package a2a
 
 import (
+	"context"
 	"iter"
 	"net"
 	"strconv"
@@ -27,6 +28,7 @@ import (
 	a2acore "github.com/a2aproject/a2a-go/v2/a2a"
 	"github.com/a2aproject/a2a-go/v2/a2aclient"
 	"github.com/a2aproject/a2a-go/v2/a2aclient/agentcard"
+	"github.com/a2aproject/a2a-go/v2/a2asrv"
 	"google.golang.org/genai"
 
 	"google.golang.org/adk/agent"
@@ -34,6 +36,15 @@ import (
 	"google.golang.org/adk/cmd/launcher/web"
 	"google.golang.org/adk/session"
 )
+
+type authInterceptor struct {
+	a2asrv.PassthroughCallInterceptor
+}
+
+func (a *authInterceptor) Before(ctx context.Context, callCtx *a2asrv.CallContext, req *a2asrv.Request) (context.Context, any, error) {
+	callCtx.User = a2asrv.NewAuthenticatedUser("test", nil)
+	return ctx, nil, nil
+}
 
 func getFreePort(t *testing.T) int {
 	t.Helper()
@@ -87,6 +98,9 @@ func TestWebLauncher_ServesA2A(t *testing.T) {
 	config := &launcher.Config{
 		AgentLoader:    agent.NewSingleLoader(agnt),
 		SessionService: session.InMemoryService(),
+		A2AOptions: []a2asrv.RequestHandlerOption{
+			a2asrv.WithCallInterceptors(&authInterceptor{}),
+		},
 	}
 
 	go func() {

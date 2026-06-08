@@ -74,13 +74,22 @@ func (e *mockA2AExecutor) Cleanup(ctx context.Context, reqCtx *a2asrv.ExecutorCo
 	}
 }
 
+type authInterceptor struct {
+	a2asrv.PassthroughCallInterceptor
+}
+
+func (a *authInterceptor) Before(ctx context.Context, callCtx *a2asrv.CallContext, req *a2asrv.Request) (context.Context, any, error) {
+	callCtx.User = a2asrv.NewAuthenticatedUser("test", nil)
+	return ctx, nil, nil
+}
+
 type testA2AServer struct {
 	*httptest.Server
 	handler a2asrv.RequestHandler
 }
 
 func startA2AServer(agentExecutor a2asrv.AgentExecutor) *testA2AServer {
-	requestHandler := a2asrv.NewHandler(agentExecutor)
+	requestHandler := a2asrv.NewHandler(agentExecutor, a2asrv.WithCallInterceptors(&authInterceptor{}))
 	return &testA2AServer{
 		Server:  httptest.NewServer(a2asrv.NewJSONRPCHandler(requestHandler)),
 		handler: requestHandler,
@@ -1113,7 +1122,7 @@ func TestRemoteAgent_ResolvesAgentCard(t *testing.T) {
 	wantResponses := []model.LLMResponse{{Content: genai.NewContentFromText("Hello!", genai.RoleModel), TurnComplete: true}}
 
 	executor := newA2AEventReplay(t, remoteEvents)
-	handler := a2asrv.NewHandler(executor)
+	handler := a2asrv.NewHandler(executor, a2asrv.WithCallInterceptors(&authInterceptor{}))
 
 	var cardServer *httptest.Server
 	mux := http.NewServeMux()
