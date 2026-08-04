@@ -65,6 +65,11 @@ type buildFlags struct {
 	execFile            string
 	dockerfileBuildPath string
 	archivePath         string
+	// goVersion is the raw --go_version override, empty unless the user set it.
+	goVersion string
+	// goImageTag is the golang base image tag the generated Dockerfile builds
+	// with, resolved by computeFlags.
+	goImageTag string
 }
 
 type sourceFlags struct {
@@ -105,6 +110,8 @@ func init() {
 	agentEngineCmd.PersistentFlags().StringVarP(&flags.source.entryPointPath, "entry_point_path", "e", "", "Path to an entry point (go 'main')")
 	agentEngineCmd.PersistentFlags().StringVarP(&flags.source.sourceDir, "source_dir", "d", "", "Directory to archive, defaults to current working directory")
 	agentEngineCmd.PersistentFlags().StringVar(&flags.agentEngine.agentEngineID, "agent_engine_id", "", "ID of the Agent Engine instance to update if it exists (default: \"\", which means a new instance will be created).")
+	agentEngineCmd.PersistentFlags().StringVar(&flags.build.goVersion, "go_version", "", "Tag of the golang builder image used for the remote build, e.g. \"1.26\" or \"1.26-alpine\""+
+		" (default: derived from the go directive of the go.mod found in --source_dir)")
 	agentEngineCmd.PersistentFlags().BoolVar(&flags.agentEngine.memoryBank.deploy, "mem_deploy", false, "If set to true then memory bank will be deployed too")
 	agentEngineCmd.PersistentFlags().StringVar(&flags.agentEngine.memoryBank.model, "mem_model", "publishers/google/models/gemini-2.5-flash", "Name of the model to be used for memory generation - for list you can GET"+
 		" https://${LOCATION_ID}-aiplatform.googleapis.com/v1beta1/publishers/google/models. It will be prefixed with projects/<project_name>/locations/<region> forming for instance full model name like "+
@@ -122,6 +129,22 @@ func (f *deployAgentEngineFlags) computeFlags() error {
 				return fmt.Errorf("cannot make an absolute path from '%v': %w", f.source.entryPointPath, err)
 			}
 			f.source.entryPointPath = absp
+
+			// Resolve the archive root once. Its contents become the root of
+			// the uploaded tarball, and therefore /app inside the build
+			// container, so both createArchive and the builder image lookup
+			// have to agree on it.
+			if f.source.sourceDir == "" {
+				wd, err := os.Getwd()
+				if err != nil {
+					return fmt.Errorf("cannot get current working directory: %w", err)
+				}
+				f.source.sourceDir = wd
+			}
+			f.source.sourceDir, err = filepath.Abs(f.source.sourceDir)
+			if err != nil {
+				return fmt.Errorf("cannot make an absolute path from '%v': %w", f.source.sourceDir, err)
+			}
 
 			if flags.build.tempDir == "" {
 				flags.build.tempDir = os.TempDir()
@@ -150,6 +173,16 @@ func (f *deployAgentEngineFlags) computeFlags() error {
 			}
 			f.build.dockerfileBuildPath = path.Join(f.build.tempDir, "Dockerfile")
 			f.build.archivePath = path.Join(f.build.tempDir, "archive.tgz")
+
+			// The remote build compiles the agent inside a golang image, so
+			// that image has to be at least as new as the agent's go directive.
+			tag, origin := deploy.BuilderImageTag(f.build.goVersion, f.source.sourceDir)
+			f.build.goImageTag = tag
+			p("Using Go builder image: golang:"+tag, "(from "+origin+")")
+			if !deploy.ModuleDirHasGoMod(f.source.sourceDir) {
+				p("Warning: no go.mod in " + f.source.sourceDir + "; the remote build runs at the root of" +
+					" that directory and will fail without one. Set --source_dir to the module root.")
+			}
 
 			dateTimeString := time.Now().Format(time.RFC3339)
 			f.agentEngine.displayName = f.agentEngine.name
@@ -184,7 +217,11 @@ func (f *deployAgentEngineFlags) prepareDockerfile() error {
 
 			var b strings.Builder
 			b.WriteString(`
-FROM golang:1.25 as builder
+FROM golang:` + f.build.goImageTag + ` AS builder
+# The official golang images pin GOTOOLCHAIN=local, which makes the build fail
+# outright when go.mod asks for a newer toolchain than the image ships. Allow
+# the toolchain to upgrade itself so a patch-level mismatch is not fatal.
+ENV GOTOOLCHAIN=auto
 WORKDIR /app
 COPY . .
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags "-s -w" -o ` + f.build.execFile + ` ` + f.source.origEntryPointPath + `
@@ -207,14 +244,8 @@ CMD ["/app/` + f.build.execFile + `", "web", "-port", "` + strconv.Itoa(flags.ag
 func (f *deployAgentEngineFlags) createArchive() error {
 	return util.LogStartStop("Creating source archive",
 		func(p util.Printer) error {
+			// computeFlags has already resolved this to an absolute path.
 			workspaceRoot := f.source.sourceDir
-			if workspaceRoot == "" {
-				var err error
-				workspaceRoot, err = os.Getwd()
-				if err != nil {
-					return fmt.Errorf("cannot get current working directory: %w", err)
-				}
-			}
 			p("Creating:", f.build.archivePath)
 			cmd := exec.Command("tar", "-czf", f.build.archivePath,
 				"-C", workspaceRoot, "--exclude=.git", "--exclude=adkgo", ".",
